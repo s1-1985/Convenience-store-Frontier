@@ -42,6 +42,18 @@ jobs:
           rm -rf android
           npx cap add android
           npx cap sync android
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("android/app/src/main/AndroidManifest.xml")
+          text = path.read_text()
+          marker = 'android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation"'
+          replacement = marker + '\n            android:screenOrientation="landscape"'
+          if 'android:screenOrientation="landscape"' not in text:
+              if marker not in text:
+                  raise SystemExit("Capacitor activity marker not found")
+              text = text.replace(marker, replacement)
+          path.write_text(text)
+          PY
 
       - name: Build installable debug APK
         working-directory: android
