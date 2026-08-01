@@ -240,8 +240,12 @@ function exportedSessions(): PlaytestSession[] {
 
 function aggregateSessions(): PlaytestSession[] {
   const finishedHistory = history.filter((entry) => entry.finished);
-  if (!session?.finished) return finishedHistory;
-  return [session, ...finishedHistory.filter((entry) => entry.sessionId !== session.sessionId)];
+  const currentSession = session;
+  if (!currentSession?.finished) return finishedHistory;
+  return [
+    currentSession,
+    ...finishedHistory.filter((entry) => entry.sessionId !== currentSession.sessionId),
+  ];
 }
 
 function renderPanel(): void {
