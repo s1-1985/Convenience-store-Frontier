@@ -96,3 +96,31 @@ export type {
   FreePlaySave,
   FreePlaySimulation,
 } from "./simulation/freePlaySimulation.js";
+
+export {
+  createDefaultStoreLayout,
+  createStoreOperationsEngine,
+  defaultCategoryWeightsForHour,
+  findStorePath,
+  restoreStoreOperationsEngine,
+} from "./game/storeOperationsEngine.js";
+export type {
+  CustomerState,
+  FixtureKind,
+  SerializedStoreOperations,
+  ShelfInventoryState,
+  StaffState,
+  StoreCategoryId,
+  StoreCustomerAgent,
+  StoreDayKpis,
+  StoreEngineContext,
+  StoreFixture,
+  StoreLayout,
+  StoreLitter,
+  StoreOperationsEngine,
+  StoreOperationsSnapshot,
+  StoreStaffAgent,
+  StoreStaffAssignments,
+  StoreStaffTask,
+  TilePoint,
+} from "./game/storeOperationsEngine.js";
