@@ -21,6 +21,11 @@ jobs:
 
       - name: Assemble verified source bundle
         run: |
+          sha256sum .m13/source.00 .m13/source.01 .m13/source.02 .m13/source.03
+          printf '%s  %s\n' '419e3b81345a118a0f02f05c15a87ae32da1b35093fab838e731d0e802d4a2ff' '.m13/source.00' | sha256sum -c -
+          printf '%s  %s\n' '62801a47f0e2baad946a156ad47b16c95ba313f5f26a69aca4e916fbdaa1a4b4' '.m13/source.01' | sha256sum -c -
+          printf '%s  %s\n' 'f4d1970dabf0c1a34302db1780bdc43cb4e2a8300ed8fd05e8e347e31f238859' '.m13/source.02' | sha256sum -c -
+          printf '%s  %s\n' '7b4ada7da71069973664f4586d2a97cd4a989965a94467a6ee74c4e413e1f5a0' '.m13/source.03' | sha256sum -c -
           cat .m13/source.00 .m13/source.01 .m13/source.02 .m13/source.03 > /tmp/m13-source.zip.b64
           printf '%s  %s\n' '310bc32ed72ee20f106be7db1a53f6d1bc7c2200c951768e3b5879deea79fb88' '/tmp/m13-source.zip.b64' | sha256sum -c -
           base64 -d /tmp/m13-source.zip.b64 > /tmp/m13-source.zip
