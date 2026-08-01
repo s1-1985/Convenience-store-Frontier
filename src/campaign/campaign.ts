@@ -499,7 +499,7 @@ function buildEvaluation(
   const serviceScore = roundScore((1 - clamp(failureRate, 0, 0.25) / 0.25) * 20);
   const regionalScore = roundScore((maxAdoption * 0.6 + maxContribution * 0.4) * 20);
   const strategyScore = roundScore((completedObjectives / OBJECTIVE_DEFINITIONS.length) * 20);
-  const resilienceBase = clamp((netLiquidity + 100_000) / 600_000, 0, 1) * 20;
+  const resilienceBase = clamp((netLiquidity + 100_000) / 600_000, 0, 1) * 15;
   const resilienceScore = roundScore(resilienceBase - (loan ? 3 : 0));
 
   const dimensions: CampaignScoreDimension[] = [
@@ -535,7 +535,7 @@ function buildEvaluation(
       id: "resilience",
       label: "資金・再建力",
       score: resilienceScore,
-      maxScore: 20,
+      maxScore: 15,
       summary: `返済考慮後資金 ${Math.round(netLiquidity).toLocaleString("ja-JP")}円`,
     },
   ];
@@ -668,7 +668,7 @@ export function createCampaignController(): CampaignController {
   ): void {
     const index = objectives.findIndex((objective) => objective.id === id);
     const objective = objectives[index];
-    if (!objective || objective.status === "completed") {
+    if (!objective || objective.status !== "active") {
       return;
     }
     const completed: CampaignObjective = {
