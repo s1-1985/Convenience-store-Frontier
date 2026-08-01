@@ -26,6 +26,10 @@ import {
   type InventoryBatch,
 } from "./inventory.js";
 import {
+  createHabitSystem,
+  type HabitSystemSnapshot,
+} from "./habits.js";
+import {
   createStoreOperations,
   emptyOperationTaskRecord,
   OPERATION_TASKS,
@@ -75,6 +79,14 @@ export interface SimulationSnapshot {
     queueCustomers: number;
     backlogByTask: OperationTaskRecord;
   };
+  habits: HabitSystemSnapshot;
+}
+
+interface CohortSlotRecord {
+  cohortId: string;
+  potentialDemand: number;
+  playerVisits: number;
+  competitorVisitsByStore: Record<string, number>;
 }
 
 interface DayAccumulator {
@@ -91,6 +103,7 @@ interface DayAccumulator {
   abandonedCustomers: number;
   operationalShelfStockoutUnits: number;
   nightOperationWorkload: number;
+  habitualDiversionsToCompetitor: number;
 }
 
 export interface Simulation {
@@ -136,6 +149,7 @@ function emptyAccumulator(weather: Weather): DayAccumulator {
     abandonedCustomers: 0,
     operationalShelfStockoutUnits: 0,
     nightOperationWorkload: 0,
+    habitualDiversionsToCompetitor: 0,
   };
 }
 
@@ -164,6 +178,8 @@ export function createSimulation(scenario: ScenarioBundle, seed: number): Simula
     { productId: string; quantity: number; arrivalAbsoluteSlot: number }[]
   >();
   const operations = createStoreOperations();
+  const habits = createHabitSystem(scenario.cohorts);
+  const competitorStoreIds = scenario.competitorStores.map((store) => store.id);
 
   const dailyReports: DailyReport[] = [];
   let weather: Weather = rollWeather(scenario.district, randomStreams.stream("weather"));
@@ -250,6 +266,7 @@ export function createSimulation(scenario: ScenarioBundle, seed: number): Simula
     const timeBlock = timeBlockForSlot(clock.slot, scenario.timeBlocks);
     const demandRng = randomStreams.stream("demand");
     const desiredProductUnitsThisSlot: Record<string, number> = {};
+    const cohortSlotRecords: CohortSlotRecord[] = [];
     let playerVisitsThisSlot = 0;
 
     for (const cohort of scenario.cohorts) {
@@ -262,13 +279,27 @@ export function createSimulation(scenario: ScenarioBundle, seed: number): Simula
         weather,
         scenario.economy,
         demandRng,
+        habits.getDemandMultiplier(cohort.id, timeBlock),
       );
       if (potentialDemand <= 0) {
         continue;
       }
 
       const evaluations = allStores.map((store) =>
-        evaluateStore(store, cohort, scenario.categories, clock.slot, scenario.economy),
+        evaluateStore(
+          store,
+          cohort,
+          scenario.categories,
+          clock.slot,
+          scenario.economy,
+          habits.getStoreChoiceBonus(
+            cohort.id,
+            timeBlock,
+            store.id,
+            playerStore.id,
+            competitorStoreIds,
+          ),
+        ),
       );
       const shares = computeStoreShares(evaluations, scenario.economy);
 
@@ -276,7 +307,22 @@ export function createSimulation(scenario: ScenarioBundle, seed: number): Simula
         addAmount(accumulator.visitsByStore, storeId, potentialDemand * share);
       }
 
+      const competitorVisitsByStore: Record<string, number> = {};
+      for (const competitorStoreId of competitorStoreIds) {
+        const visits = potentialDemand * (shares[competitorStoreId] ?? 0);
+        if (visits > 0) {
+          competitorVisitsByStore[competitorStoreId] = visits;
+        }
+      }
+
       const playerVisits = potentialDemand * (shares[playerStore.id] ?? 0);
+      cohortSlotRecords.push({
+        cohortId: cohort.id,
+        potentialDemand,
+        playerVisits,
+        competitorVisitsByStore,
+      });
+
       if (playerVisits > 0) {
         playerVisitsThisSlot += playerVisits;
         const categoryUnits = allocateCategoryUnits(
@@ -318,6 +364,7 @@ export function createSimulation(scenario: ScenarioBundle, seed: number): Simula
     accumulator.operationalShelfStockoutUnits += operationResult.operationalShelfStockoutUnits;
     accumulator.nightOperationWorkload += operationResult.nightWorkloadAdded;
 
+    let soldUnitsThisSlot = 0;
     for (const [productId, desired] of Object.entries(desiredProductUnitsThisSlot)) {
       if (desired <= 0) {
         continue;
@@ -328,6 +375,7 @@ export function createSimulation(scenario: ScenarioBundle, seed: number): Simula
         operationallyFulfilledDesired,
       );
       inventoryByProduct[productId] = remaining;
+      soldUnitsThisSlot += soldQuantity;
       if (soldQuantity > 0) {
         addAmount(accumulator.soldUnitsByProduct, productId, soldQuantity);
       }
@@ -335,6 +383,52 @@ export function createSimulation(scenario: ScenarioBundle, seed: number): Simula
       if (shortfall > 0) {
         addAmount(accumulator.stockoutUnitsByProduct, productId, shortfall);
       }
+    }
+
+    const finalSalesFulfillmentRatio =
+      desiredUnitsTotal > 0
+        ? Math.max(0, Math.min(1, soldUnitsThisSlot / desiredUnitsTotal))
+        : 1;
+
+    for (const cohortRecord of cohortSlotRecords) {
+      const playerSuccessfulVisits =
+        cohortRecord.playerVisits * finalSalesFulfillmentRatio;
+      const failedPlayerVisits = Math.max(
+        0,
+        cohortRecord.playerVisits - playerSuccessfulVisits,
+      );
+      const competitorVisits = Object.values(
+        cohortRecord.competitorVisitsByStore,
+      ).reduce((sum, visits) => sum + visits, 0);
+      const divertedToCompetitor =
+        competitorVisits > 0
+          ? habits.computeDiversionToCompetitor(
+              cohortRecord.cohortId,
+              timeBlock,
+              failedPlayerVisits,
+            )
+          : 0;
+
+      if (divertedToCompetitor > 0 && competitorVisits > 0) {
+        for (const [storeId, visits] of Object.entries(
+          cohortRecord.competitorVisitsByStore,
+        )) {
+          addAmount(
+            accumulator.visitsByStore,
+            storeId,
+            divertedToCompetitor * (visits / competitorVisits),
+          );
+        }
+        accumulator.habitualDiversionsToCompetitor += divertedToCompetitor;
+      }
+
+      habits.recordSlot(cohortRecord.cohortId, timeBlock, {
+        potentialDemand: cohortRecord.potentialDemand,
+        playerVisits: cohortRecord.playerVisits,
+        playerSuccessfulVisits,
+        competitorSuccessfulVisits: competitorVisits + divertedToCompetitor,
+        divertedToCompetitor,
+      });
     }
 
     if (isOpen) {
@@ -357,6 +451,8 @@ export function createSimulation(scenario: ScenarioBundle, seed: number): Simula
           addAmount(salesUnitsByCategory, categoryId, units);
         }
       }
+
+      const habitSummary = habits.closeDay(clock.day);
 
       dailyReports.push({
         day: clock.day,
@@ -382,6 +478,16 @@ export function createSimulation(scenario: ScenarioBundle, seed: number): Simula
         operationalShelfStockoutUnits: accumulator.operationalShelfStockoutUnits,
         backroomInventoryUnitsEnd: totalInventory(inventoryByProduct),
         nightOperationWorkload: accumulator.nightOperationWorkload,
+        habitStatesByCohort: habitSummary.byCohort,
+        habitRegionalAdoptionByHabit: habitSummary.regionalAdoptionByHabit,
+        habitPlayerContributionByHabit: habitSummary.playerContributionByHabit,
+        habitDailyPotentialDemandByHabit: habitSummary.dailyPotentialDemandByHabit,
+        habitDailyPlayerSuccessfulVisitsByHabit:
+          habitSummary.dailyPlayerSuccessfulVisitsByHabit,
+        habitDailyCompetitorSuccessfulVisitsByHabit:
+          habitSummary.dailyCompetitorSuccessfulVisitsByHabit,
+        habitualDiversionsToCompetitor:
+          accumulator.habitualDiversionsToCompetitor,
       });
 
       planNextDayOrders();
@@ -419,6 +525,7 @@ export function createSimulation(scenario: ScenarioBundle, seed: number): Simula
           queueCustomers: operations.getQueueCustomers(),
           backlogByTask: operations.getBacklog(),
         },
+        habits: habits.getSnapshot(),
       };
     },
 
@@ -507,3 +614,4 @@ export function createSimulation(scenario: ScenarioBundle, seed: number): Simula
 
 export { OTHER_OPTION_ID };
 export type { OperationTaskId } from "./operations.js";
+export type { HabitId, HabitMetric, HabitState, HabitSystemSnapshot } from "./habits.js";

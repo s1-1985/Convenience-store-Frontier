@@ -14,6 +14,7 @@ export function evaluateStore(
   categories: readonly CategoryDefinition[],
   slot: number,
   economy: EconomyBalance,
+  habitScoreBonus = 0,
 ): StoreEvaluation {
   if (!isWithinHours(slot, store.openingHour, store.closingHour)) {
     return { storeId: store.id, score: null };
@@ -45,7 +46,8 @@ export function evaluateStore(
     weights.price * priceScore +
     weights.cleanliness * cleanlinessScore +
     weights.reputation * reputationScore +
-    weights.distance * distanceScore;
+    weights.distance * distanceScore +
+    habitScoreBonus;
 
   return { storeId: store.id, score };
 }

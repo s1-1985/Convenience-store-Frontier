@@ -1,4 +1,5 @@
 import type { OperationTaskRecord } from "../simulation/operations.js";
+import type { HabitId, HabitMetricRecord } from "../simulation/habits.js";
 
 export interface DailyReport {
   day: number;
@@ -24,4 +25,11 @@ export interface DailyReport {
   operationalShelfStockoutUnits: number;
   backroomInventoryUnitsEnd: number;
   nightOperationWorkload: number;
+  habitStatesByCohort: Record<string, HabitMetricRecord>;
+  habitRegionalAdoptionByHabit: Record<HabitId, number>;
+  habitPlayerContributionByHabit: Record<HabitId, number>;
+  habitDailyPotentialDemandByHabit: Record<HabitId, number>;
+  habitDailyPlayerSuccessfulVisitsByHabit: Record<HabitId, number>;
+  habitDailyCompetitorSuccessfulVisitsByHabit: Record<HabitId, number>;
+  habitualDiversionsToCompetitor: number;
 }
