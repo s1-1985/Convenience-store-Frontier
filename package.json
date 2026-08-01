@@ -13,7 +13,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "balance": "npm run build:core && node dist-core/balance/runBenchmark.js --seeds=100 --format=both",
-    "balance:ci": "npm run build:core && node dist-core/balance/runBenchmark.js --seeds=8 --format=summary"
+    "balance:ci": "npm run build:core && node dist-core/balance/runBenchmark.js --seeds=8 --format=summary && node dist-core/balance/inspectDiagnostics.js"
   },
   "devDependencies": {
     "@types/node": "^22.9.0",
