@@ -26,6 +26,7 @@ jobs:
           path: .m13
           if-no-files-found: error
           retention-days: 1
+          include-hidden-files: true
 
       - name: Assemble and verify source files
         run: |
