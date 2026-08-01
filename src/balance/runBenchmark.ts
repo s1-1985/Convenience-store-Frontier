@@ -79,6 +79,10 @@ function writeOutput(path: string, content: string): void {
   writeFileSync(path, content, "utf-8");
 }
 
+function percent(value: number): string {
+  return `${(value * 100).toFixed(1)}%`;
+}
+
 export function runBenchmarkCli(arguments_: readonly string[]): number {
   const options = parseOptions(arguments_);
   const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -90,6 +94,16 @@ export function runBenchmarkCli(arguments_: readonly string[]): number {
   });
 
   console.log(formatBalanceSummary(report));
+  console.log(
+    [
+      "No-action diagnostic rates:",
+      `morning=${percent(report.noActionSummary.morningOutflowRate)}`,
+      `lunch=${percent(report.noActionSummary.lunchStockoutRate)}`,
+      `waste=${percent(report.noActionSummary.wasteRate)}`,
+      `closed=${percent(report.noActionSummary.closedDemandRate)}`,
+      `ordered=${percent(report.noActionSummary.orderedRate)}`,
+    ].join(" "),
+  );
   if (options.format === "json" || options.format === "both") {
     const path = resolve(projectRoot, `${options.outputBase}.json`);
     writeOutput(path, `${JSON.stringify(report, null, 2)}\n`);
