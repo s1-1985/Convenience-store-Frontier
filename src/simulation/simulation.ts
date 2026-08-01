@@ -17,6 +17,7 @@ import {
 } from "./finance.js";
 import {
   absoluteSlot,
+  availableQuantity,
   consumeFifo,
   createInitialInventory,
   expireBatches,
@@ -24,6 +25,13 @@ import {
   planDailyOrders,
   type InventoryBatch,
 } from "./inventory.js";
+import {
+  createStoreOperations,
+  emptyOperationTaskRecord,
+  OPERATION_TASKS,
+  type OperationTaskId,
+  type OperationTaskRecord,
+} from "./operations.js";
 import { allocateCategoryUnits, allocateProductUnits } from "./purchase.js";
 import { RandomStreams } from "./rng.js";
 import { computeStoreShares, evaluateStore, OTHER_OPTION_ID } from "./storeChoice.js";
@@ -46,7 +54,8 @@ export type PolicyCommand =
   | { type: "set_category_area"; categoryArea: Record<string, number> }
   | { type: "set_staffing"; timeBlock: TimeBlockId; count: number }
   | { type: "set_ordering_policy"; policy: OrderingPolicyId }
-  | { type: "set_delivery_policy"; policy: DeliveryPolicyId };
+  | { type: "set_delivery_policy"; policy: DeliveryPolicyId }
+  | { type: "set_task_priorities"; priorities: OperationTaskId[] };
 
 export interface SimulationSnapshot {
   day: number;
@@ -60,6 +69,11 @@ export interface SimulationSnapshot {
     staffingByTimeBlock: Record<TimeBlockId, number>;
     orderingPolicy: OrderingPolicyId;
     deliveryPolicy: DeliveryPolicyId;
+    taskPriorities: OperationTaskId[];
+  };
+  operations: {
+    queueCustomers: number;
+    backlogByTask: OperationTaskRecord;
   };
 }
 
@@ -72,6 +86,11 @@ interface DayAccumulator {
   soldUnitsByProduct: Record<string, number>;
   stockoutUnitsByProduct: Record<string, number>;
   wasteUnitsByProduct: Record<string, number>;
+  operationWorkloadByTask: OperationTaskRecord;
+  operationProcessedByTask: OperationTaskRecord;
+  abandonedCustomers: number;
+  operationalShelfStockoutUnits: number;
+  nightOperationWorkload: number;
 }
 
 export interface Simulation {
@@ -89,6 +108,19 @@ function addAmount(record: Record<string, number>, key: string, amount: number):
   record[key] = (record[key] ?? 0) + amount;
 }
 
+function addOperationRecord(target: OperationTaskRecord, source: OperationTaskRecord): void {
+  for (const task of OPERATION_TASKS) {
+    target[task] += source[task];
+  }
+}
+
+function totalInventory(inventoryByProduct: Record<string, InventoryBatch[]>): number {
+  return Object.values(inventoryByProduct).reduce(
+    (sum, batches) => sum + availableQuantity(batches),
+    0,
+  );
+}
+
 function emptyAccumulator(weather: Weather): DayAccumulator {
   return {
     weather,
@@ -99,6 +131,11 @@ function emptyAccumulator(weather: Weather): DayAccumulator {
     soldUnitsByProduct: {},
     stockoutUnitsByProduct: {},
     wasteUnitsByProduct: {},
+    operationWorkloadByTask: emptyOperationTaskRecord(),
+    operationProcessedByTask: emptyOperationTaskRecord(),
+    abandonedCustomers: 0,
+    operationalShelfStockoutUnits: 0,
+    nightOperationWorkload: 0,
   };
 }
 
@@ -108,7 +145,11 @@ export function createSimulation(scenario: ScenarioBundle, seed: number): Simula
   let finished = false;
   let cash = scenario.playerStore.initialCash;
 
-  const playerStore: StoreDefinition = { ...scenario.playerStore };
+  const playerStore: StoreDefinition = {
+    ...scenario.playerStore,
+    categoryArea: { ...scenario.playerStore.categoryArea },
+    staffingByTimeBlock: { ...scenario.playerStore.staffingByTimeBlock },
+  };
   const allStores = [playerStore, ...scenario.competitorStores];
   const slotsPerBlock: Record<TimeBlockId, number> = Object.fromEntries(
     scenario.timeBlocks.map((block) => [block.id, slotsInTimeBlock(block)]),
@@ -122,16 +163,18 @@ export function createSimulation(scenario: ScenarioBundle, seed: number): Simula
     number,
     { productId: string; quantity: number; arrivalAbsoluteSlot: number }[]
   >();
+  const operations = createStoreOperations();
 
   const dailyReports: DailyReport[] = [];
   let weather: Weather = rollWeather(scenario.district, randomStreams.stream("weather"));
   let accumulator = emptyAccumulator(weather);
 
-  function applyDueDeliveries(currentAbsoluteSlot: number): void {
+  function applyDueDeliveries(currentAbsoluteSlot: number): number {
     const deliveries = pendingDeliveries.get(currentAbsoluteSlot);
     if (!deliveries || deliveries.length === 0) {
-      return;
+      return 0;
     }
+    let deliveredUnits = 0;
     for (const plan of deliveries) {
       const product = productsById.get(plan.productId);
       if (!product) {
@@ -144,9 +187,11 @@ export function createSimulation(scenario: ScenarioBundle, seed: number): Simula
         expirySlot: currentAbsoluteSlot + product.shelfLifeSlots,
       };
       inventoryByProduct[plan.productId] = [...(inventoryByProduct[plan.productId] ?? []), batch];
+      deliveredUnits += plan.quantity;
     }
     accumulator.deliveryEventCount += 1;
     pendingDeliveries.delete(currentAbsoluteSlot);
+    return deliveredUnits;
   }
 
   function expireDueBatches(currentAbsoluteSlot: number): void {
@@ -199,11 +244,13 @@ export function createSimulation(scenario: ScenarioBundle, seed: number): Simula
     }
 
     const currentAbsoluteSlot = absoluteSlot(clock.day, clock.slot);
-    applyDueDeliveries(currentAbsoluteSlot);
+    const deliveredUnits = applyDueDeliveries(currentAbsoluteSlot);
     expireDueBatches(currentAbsoluteSlot);
 
     const timeBlock = timeBlockForSlot(clock.slot, scenario.timeBlocks);
     const demandRng = randomStreams.stream("demand");
+    const desiredProductUnitsThisSlot: Record<string, number> = {};
+    let playerVisitsThisSlot = 0;
 
     for (const cohort of scenario.cohorts) {
       const potentialDemand = computeCohortPotentialDemand(
@@ -231,6 +278,7 @@ export function createSimulation(scenario: ScenarioBundle, seed: number): Simula
 
       const playerVisits = potentialDemand * (shares[playerStore.id] ?? 0);
       if (playerVisits > 0) {
+        playerVisitsThisSlot += playerVisits;
         const categoryUnits = allocateCategoryUnits(
           playerVisits,
           playerStore,
@@ -239,32 +287,61 @@ export function createSimulation(scenario: ScenarioBundle, seed: number): Simula
           scenario.economy,
         );
         const desiredProductUnits = allocateProductUnits(categoryUnits, scenario.products);
-
         for (const [productId, desired] of Object.entries(desiredProductUnits)) {
-          if (desired <= 0) {
-            continue;
-          }
-          const { remaining, soldQuantity } = consumeFifo(inventoryByProduct[productId] ?? [], desired);
-          inventoryByProduct[productId] = remaining;
-          if (soldQuantity > 0) {
-            addAmount(accumulator.soldUnitsByProduct, productId, soldQuantity);
-          }
-          const shortfall = desired - soldQuantity;
-          if (shortfall > 0) {
-            addAmount(accumulator.stockoutUnitsByProduct, productId, shortfall);
-          }
+          addAmount(desiredProductUnitsThisSlot, productId, desired);
         }
       }
     }
 
     const isOpen = isWithinHours(clock.slot, playerStore.openingHour, playerStore.closingHour);
+    const staffCount = playerStore.staffingByTimeBlock[timeBlock];
+    const desiredUnitsTotal = Object.values(desiredProductUnitsThisSlot).reduce(
+      (sum, units) => sum + units,
+      0,
+    );
+    const dayJustEnded = isLastSlotOfDay(clock);
+    const operationResult = operations.processSlot({
+      currentAbsoluteSlot,
+      customerArrivals: playerVisitsThisSlot,
+      desiredProductUnits: desiredUnitsTotal,
+      deliveryUnits: deliveredUnits,
+      staffCount,
+      isOpen,
+      isLastSlotOfDay: dayJustEnded,
+      isNight: isOpen && timeBlock === "evening",
+      backroomUnitsAvailable: totalInventory(inventoryByProduct),
+    });
+
+    addOperationRecord(accumulator.operationWorkloadByTask, operationResult.workloadAddedByTask);
+    addOperationRecord(accumulator.operationProcessedByTask, operationResult.processedByTask);
+    accumulator.abandonedCustomers += operationResult.abandonedCustomers;
+    accumulator.operationalShelfStockoutUnits += operationResult.operationalShelfStockoutUnits;
+    accumulator.nightOperationWorkload += operationResult.nightWorkloadAdded;
+
+    for (const [productId, desired] of Object.entries(desiredProductUnitsThisSlot)) {
+      if (desired <= 0) {
+        continue;
+      }
+      const operationallyFulfilledDesired = desired * operationResult.salesFulfillmentRatio;
+      const { remaining, soldQuantity } = consumeFifo(
+        inventoryByProduct[productId] ?? [],
+        operationallyFulfilledDesired,
+      );
+      inventoryByProduct[productId] = remaining;
+      if (soldQuantity > 0) {
+        addAmount(accumulator.soldUnitsByProduct, productId, soldQuantity);
+      }
+      const shortfall = operationallyFulfilledDesired - soldQuantity;
+      if (shortfall > 0) {
+        addAmount(accumulator.stockoutUnitsByProduct, productId, shortfall);
+      }
+    }
+
     if (isOpen) {
-      const staffCount = playerStore.staffingByTimeBlock[timeBlock];
       accumulator.laborCost += computeLaborCost(staffCount, scenario.economy);
     }
     accumulator.utilitiesCost += computeUtilitiesCost(isOpen, scenario.economy);
 
-    const dayJustEnded = isLastSlotOfDay(clock);
     if (dayJustEnded) {
       const { revenue, cogs } = computeSalesFinance(accumulator.soldUnitsByProduct, scenario.products);
       const wasteCost = computeWasteCost(accumulator.wasteUnitsByProduct, scenario.products);
@@ -297,6 +374,14 @@ export function createSimulation(scenario: ScenarioBundle, seed: number): Simula
         salesUnitsByProduct: accumulator.soldUnitsByProduct,
         stockoutUnitsByProduct: accumulator.stockoutUnitsByProduct,
         wasteUnitsByProduct: accumulator.wasteUnitsByProduct,
+        operationWorkloadByTask: accumulator.operationWorkloadByTask,
+        operationProcessedByTask: accumulator.operationProcessedByTask,
+        operationBacklogByTask: operations.getBacklog(),
+        queueCustomersEnd: operations.getQueueCustomers(),
+        abandonedCustomers: accumulator.abandonedCustomers,
+        operationalShelfStockoutUnits: accumulator.operationalShelfStockoutUnits,
+        backroomInventoryUnitsEnd: totalInventory(inventoryByProduct),
+        nightOperationWorkload: accumulator.nightOperationWorkload,
       });
 
       planNextDayOrders();
@@ -328,6 +413,11 @@ export function createSimulation(scenario: ScenarioBundle, seed: number): Simula
           staffingByTimeBlock: { ...playerStore.staffingByTimeBlock },
           orderingPolicy: playerStore.orderingPolicy,
           deliveryPolicy: playerStore.deliveryPolicy,
+          taskPriorities: operations.getPriorities(),
+        },
+        operations: {
+          queueCustomers: operations.getQueueCustomers(),
+          backlogByTask: operations.getBacklog(),
         },
       };
     },
@@ -385,6 +475,10 @@ export function createSimulation(scenario: ScenarioBundle, seed: number): Simula
           playerStore.deliveryPolicy = command.policy;
           break;
         }
+        case "set_task_priorities": {
+          operations.setPriorities(command.priorities);
+          break;
+        }
       }
     },
 
@@ -412,3 +506,4 @@ export function createSimulation(scenario: ScenarioBundle, seed: number): Simula
 }
 
 export { OTHER_OPTION_ID };
+export type { OperationTaskId } from "./operations.js";
