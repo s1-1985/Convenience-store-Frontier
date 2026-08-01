@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#182318" />
+    <meta name="theme-color" content="#061426" />
     <meta
       name="description"
-      content="Convenience-store Frontier 30日版垂直スライスの経営画面"
+      content="Convenience-store Frontier フリープレイ店内営業ゲーム"
     />
     <title>Convenience-store Frontier</title>
     <link rel="stylesheet" href="/src/ui/styles.css" />
@@ -67,7 +67,7 @@
 
       <main class="main-layout">
         <section class="left-column">
-          <article class="panel store-panel">
+          <article class="panel store-panel" id="store-status-panel">
             <div class="panel-heading">
               <div>
                 <p class="eyebrow">STORE FLOOR</p>
@@ -193,7 +193,7 @@
           </article>
         </aside>
 
-        <section class="panel report-panel">
+        <section class="panel report-panel" id="report-panel">
           <div class="panel-heading report-heading">
             <div>
               <p class="eyebrow">REPORTING DESK</p>
@@ -223,5 +223,6 @@
     <script type="module" src="/src/ui/main.ts"></script>
     <script type="module" src="/src/ui/storeVisualizationRuntime.ts"></script>
     <script type="module" src="/src/ui/playtestRuntime.ts"></script>
+    <script type="module" src="/src/ui/storeGameRuntime.ts"></script>
   </body>
 </html>
