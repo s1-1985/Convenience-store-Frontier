@@ -21,6 +21,28 @@
 - 時間帯別人員
 - 店内作業の優先順位
 
+## ブラウザUI
+
+Milestone 6の基本UIでは、次の操作とレポートをブラウザから利用できます。
+
+- 15分単位の再生、一日進行、7日進行、30日進行
+- 営業時間、発注方針、納品方式、人員、作業優先順位、売場面積の変更
+- 行列、棚欠品、在庫不足、廃棄、赤字、常連流出の通知
+- 日次、在庫・欠品、地域習慣、競合行動のレポート
+- 重大問題を検出した場合の自動停止
+
+```bash
+npm install
+npm run dev
+```
+
+本番ビルドは次で作成します。
+
+```bash
+npm run build
+npm run preview
+```
+
 ## 垂直スライスの核
 
 1. 朝の需要を逃している店を見る
@@ -50,4 +72,4 @@
 
 ## Status
 
-Pre-production / playable simulation design
+Playable numeric simulation / basic browser UI
