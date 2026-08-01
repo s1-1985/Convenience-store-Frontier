@@ -35,5 +35,28 @@ export type {
   HabitSystem,
   HabitSystemSnapshot,
 } from "./simulation/habits.js";
+export {
+  CAMPAIGN_OBJECTIVE_IDS,
+  createCampaignController,
+} from "./campaign/campaign.js";
+export type {
+  CampaignController,
+  CampaignDayRecord,
+  CampaignEvaluation,
+  CampaignEvent,
+  CampaignEventKind,
+  CampaignEventPriority,
+  CampaignLoan,
+  CampaignObjective,
+  CampaignObjectiveId,
+  CampaignObjectiveStatus,
+  CampaignObservation,
+  CampaignPolicyHistoryEntry,
+  CampaignPolicyObservation,
+  CampaignScoreDimension,
+  CampaignSnapshot,
+  CampaignUpdate,
+  CompanyHistoryEntry,
+} from "./campaign/campaign.js";
 export type { DailyReport } from "./reporting/dailyReport.js";
 export type * from "./simulation/types.js";
