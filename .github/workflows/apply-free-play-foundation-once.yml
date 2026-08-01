@@ -1,0 +1,375 @@
+name: Apply free-play foundation once
+
+on:
+  push:
+    branches:
+      - agent/free-play-android-foundation
+    paths:
+      - .github/workflows/apply-free-play-foundation-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/free-play-android-foundation
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Capacitor dependencies
+        run: |
+          npm install --save-exact @capacitor/core@8.4.2 @capacitor/android@8.4.2
+          npm install --save-dev --save-exact @capacitor/cli@8.4.2
+
+      - name: Wire endless free play into core and UI
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace(path_string, old, new, count=-1):
+              path = Path(path_string)
+              text = path.read_text()
+              if old not in text:
+                  raise SystemExit(f'pattern not found in {path_string}: {old[:120]!r}')
+              path.write_text(text.replace(old, new, count))
+
+          # Simulation core: default remains scenario-bounded for tests, free play opts into no end date.
+          path = Path('src/simulation/simulation.ts')
+          text = path.read_text()
+          marker = '''export interface Simulation {
+            getSnapshot(): SimulationSnapshot;
+            getDailyReport(day: number): DailyReport | undefined;
+            getAllDailyReports(): DailyReport[];
+            applyPolicy(command: PolicyCommand): void;
+            advanceSlot(): void;
+            advanceDay(): void;
+            runToEnd(): void;
+            isFinished(): boolean;
+          }
+          '''
+          replacement = marker + '''
+          export interface SimulationOptions {
+            maxDays?: number | null;
+          }
+          '''
+          if 'export interface SimulationOptions' not in text:
+              if marker not in text:
+                  raise SystemExit('Simulation interface marker not found')
+              text = text.replace(marker, replacement)
+          text = text.replace(
+              'export function createSimulation(scenario: ScenarioBundle, seed: number): Simulation {',
+              '''export function createSimulation(
+            scenario: ScenarioBundle,
+            seed: number,
+            options: SimulationOptions = {},
+          ): Simulation {
+            const maxDays = options.maxDays === undefined ? scenario.scenario.totalDays : options.maxDays;''',
+          )
+          text = text.replace(
+              'if (clock.day + 1 > scenario.scenario.totalDays) {',
+              'if (maxDays !== null && clock.day + 1 > maxDays) {',
+          )
+          text = text.replace(
+              'if (clock.day > scenario.scenario.totalDays) {',
+              'if (maxDays !== null && clock.day > maxDays) {',
+          )
+          text = text.replace(
+              '''    runToEnd(): void {
+                while (!finished) {
+                  processSlot();
+                }
+              },''',
+              '''    runToEnd(): void {
+                if (maxDays === null) {
+                  throw new Error("Endless simulation has no end date");
+                }
+                while (!finished) {
+                  processSlot();
+                }
+              },''',
+          )
+          path.write_text(text)
+
+          # Competitive wrapper passes the simulation options through.
+          path = Path('src/simulation/competitiveSimulation.ts')
+          text = path.read_text()
+          text = text.replace(
+              '''  type PolicyCommand,
+            type Simulation,
+            type SimulationSnapshot,''',
+              '''  type PolicyCommand,
+            type Simulation,
+            type SimulationOptions,
+            type SimulationSnapshot,''',
+          )
+          text = text.replace(
+              '''export function createCompetitiveSimulation(
+            scenario: ScenarioBundle,
+            seed: number,
+          ): CompetitiveSimulation {''',
+              '''export function createCompetitiveSimulation(
+            scenario: ScenarioBundle,
+            seed: number,
+            options: SimulationOptions = {},
+          ): CompetitiveSimulation {''',
+          )
+          text = text.replace(
+              '  const core = createCoreSimulation(competitiveScenario, seed);',
+              '  const core = createCoreSimulation(competitiveScenario, seed, options);',
+          )
+          text = text.replace(
+              '''    runToEnd(): void {
+                while (!core.isFinished()) {
+                  core.advanceDay();
+                  syncCompletedDays();
+                }
+              },''',
+              '''    runToEnd(): void {
+                core.runToEnd();
+                syncCompletedDays();
+              },''',
+          )
+          path.write_text(text)
+
+          # Browser UI uses the replayable auto-save session.
+          path = Path('src/ui/main.ts')
+          text = path.read_text()
+          text = text.replace(
+              '''import {
+            createCompetitiveSimulation,
+            type CompetitiveDailyReport,
+            type CompetitiveSimulation,
+          } from "../simulation/competitiveSimulation.js";''',
+              '''import type { CompetitiveDailyReport } from "../simulation/competitiveSimulation.js";
+          import type { FreePlaySimulation } from "../simulation/freePlaySimulation.js";''',
+          )
+          text = text.replace(
+              'import { loadBrowserScenario } from "./browserScenario.js";',
+              '''import { loadBrowserScenario } from "./browserScenario.js";
+          import {
+            clearBrowserFreePlaySave,
+            createBrowserFreePlaySession,
+            type BrowserFreePlaySession,
+          } from "./browserFreePlaySession.js";''',
+          )
+          text = text.replace(
+              '''let scenario: ScenarioBundle;
+          let simulation: CompetitiveSimulation;''',
+              '''let scenario: ScenarioBundle;
+          let browserSession: BrowserFreePlaySession;
+          let simulation: FreePlaySimulation;''',
+          )
+          text = text.replace(
+              '''  if (simulation.isFinished()) {
+              stopPlayback("30日間の営業を完了した");
+            }
+            render();''',
+              '  render();',
+          )
+          text = text.replace(
+              '  for (let i = 0; i < days && !simulation.isFinished(); i += 1) {',
+              '  for (let i = 0; i < days; i += 1) {',
+          )
+          text = text.replace(
+              '''  if (simulation.isFinished()) {
+              lastStopReason = "30日間の営業を完了した";
+            }
+            render();''',
+              '  render();',
+          )
+          start = text.index('function runToEnd(): void {')
+          end = text.index('\n\nfunction populateHourSelect', start)
+          text = text[:start] + '''function runToEnd(): void {
+            advanceDays(30);
+          }''' + text[end:]
+          text = text.replace(
+              '''function resetSimulation(showMessage = true): void {
+            stopPlayback();
+            simulation = createCompetitiveSimulation(scenario, currentSeed());''',
+              '''function resetSimulation(showMessage = true): void {
+            stopPlayback();
+            clearBrowserFreePlaySave();
+            browserSession = createBrowserFreePlaySession(scenario, currentSeed());
+            simulation = browserSession.simulation;
+            seedInput.value = String(browserSession.seed);''',
+          )
+          text = text.replace(
+              '''  const finished = snapshot.finished;
+            for (const id of ["play-button", "slot-button", "day-button", "week-button", "end-button"]) {
+              element<HTMLButtonElement>(id).disabled = finished;
+            }
+            if (finished) {
+              playButton.textContent = "営業完了";
+            }''',
+              '''  for (const id of ["play-button", "slot-button", "day-button", "week-button", "end-button"]) {
+              element<HTMLButtonElement>(id).disabled = false;
+            }''',
+          )
+          text = text.replace(
+              '  element<HTMLButtonElement>("end-button").addEventListener("click", runToEnd);',
+              '  element<HTMLButtonElement>("end-button").addEventListener("click", runToEnd);',
+          )
+          text = text.replace(
+              '''    element<HTMLElement>("scenario-name").textContent = `${scenario.scenario.displayName} / ${scenario.district.displayName}`;
+              buildPolicyControls();
+              bindEvents();
+              simulation = createCompetitiveSimulation(scenario, currentSeed());
+              syncPolicyForm();''',
+              '''    element<HTMLElement>("scenario-name").textContent = `フリープレイ / ${scenario.district.displayName}`;
+              buildPolicyControls();
+              browserSession = createBrowserFreePlaySession(scenario, currentSeed());
+              simulation = browserSession.simulation;
+              seedInput.value = String(browserSession.seed);
+              bindEvents();
+              syncPolicyForm();
+              if (browserSession.restored) {
+                policyMessage.textContent = `${simulation.getSnapshot().day}日目の自動保存から再開した。`;
+                policyMessage.className = "form-message success-message";
+              }''',
+          )
+          text = text.replace(
+              '    loadingScreen.hidden = true;\n    app.hidden = false;',
+              '''    loadingScreen.hidden = true;
+              app.hidden = false;
+              window.addEventListener("beforeunload", () => browserSession.flushSave());
+              document.addEventListener("visibilitychange", () => {
+                if (document.hidden) browserSession.flushSave();
+              });''',
+          )
+          path.write_text(text)
+
+          # Main HTML: remove campaign from normal play and make the button an interval command.
+          replace(
+              'index.html',
+              '<button id="end-button" type="button">30日目まで</button>',
+              '<button id="end-button" type="button">30日進行</button>',
+          )
+          replace(
+              'index.html',
+              '    <script type="module" src="/src/ui/campaignRuntime.ts"></script>\n',
+              '',
+          )
+
+          # Playtest telemetry follows a continuing free-play session across reloads.
+          path = Path('src/ui/playtestRuntime.ts')
+          text = path.read_text()
+          text = text.replace(
+              '  return optionalElement("scenario-name")?.textContent?.trim() || "30日版垂直スライス";',
+              '  return optionalElement("scenario-name")?.textContent?.trim() || "フリープレイ";',
+          )
+          text = text.replace(
+              '''function recoverInterruptedSession(): void {
+            const stored = readStorage<unknown>(ACTIVE_STORAGE_KEY, null);
+            if (isPlaytestSession(stored) && !stored.finished) {
+              archive(finishPlaytestSession(stored, "reloaded", Date.now()));
+            }
+            removeStorage(ACTIVE_STORAGE_KEY);
+          }''',
+              '''function recoverInterruptedSession(): PlaytestSession | null {
+            const stored = readStorage<unknown>(ACTIVE_STORAGE_KEY, null);
+            if (!isPlaytestSession(stored)) {
+              removeStorage(ACTIVE_STORAGE_KEY);
+              return null;
+            }
+            if (stored.finished) {
+              archive(stored);
+              removeStorage(ACTIVE_STORAGE_KEY);
+              return null;
+            }
+            const resumed = resumePlaytestSession(stored, Date.now());
+            writeStorage(ACTIVE_STORAGE_KEY, resumed);
+            return resumed;
+          }''',
+          )
+          text = text.replace(
+              '<div><span>完了日</span><strong>${session.completedDay}/30</strong></div>',
+              '<div><span>経過日</span><strong>${session.completedDay}日</strong></div>',
+          )
+          text = text.replace(
+              '''      <div><span>${assessment.completedThirtyDays ? "✓" : "○"}</span>30日完走</div>
+                <div><span>${assessment.durationInTargetRange ? "✓" : "○"}</span>45〜70分</div>''',
+              '''      <div><span>${assessment.completedThirtyDays ? "✓" : "○"}</span>30日到達</div>
+                <div><span>●</span>終了条件なし</div>''',
+          )
+          text = text.replace(
+              '    <p class="playtest-note">操作、方針変更、気づき、完走時間を記録する。ネットワーク送信は行わない。</p>',
+              '    <p class="playtest-note">フリープレイの操作、方針変更、気づき、継続時間を記録する。ネットワーク送信は行わない。</p>',
+          )
+          text = text.replace(
+              '''  captureFinalEvaluation();
+            const completed =
+              session.completedDay >= 30 || optionalElement("play-button")?.textContent?.includes("営業完了");
+            if (completed && !session.finished) finishCurrent("completed");
+            persist();''',
+              '''  captureFinalEvaluation();
+            persist();''',
+          )
+          text = text.replace(
+              '''  history = loadHistory();
+            recoverInterruptedSession();
+            startNewSession();''',
+              '''  history = loadHistory();
+            session = recoverInterruptedSession();
+            if (!session) startNewSession();''',
+          )
+          path.write_text(text)
+
+          # Fix the save parser test to compare the same captured timestamp.
+          path = Path('src/tests/freePlaySimulation.test.ts')
+          text = path.read_text()
+          text = text.replace(
+              '''    const serialized = JSON.stringify(simulation.exportSave());
+
+              expect(parseFreePlaySave(serialized)).toEqual(simulation.exportSave());''',
+              '''    const save = simulation.exportSave();
+              const serialized = JSON.stringify(save);
+
+              expect(parseFreePlaySave(serialized)).toEqual(save);''',
+          )
+          path.write_text(text)
+
+          # Public exports and documentation.
+          path = Path('src/index.ts')
+          text = path.read_text()
+          if 'from "./simulation/freePlaySimulation.js"' not in text:
+              text += '''\nexport {\n  createFreePlaySimulation,\n  isFreePlaySave,\n  parseFreePlaySave,\n} from "./simulation/freePlaySimulation.js";\nexport type {\n  FreePlayCommandEvent,\n  FreePlaySave,\n  FreePlaySimulation,\n} from "./simulation/freePlaySimulation.js";\n'''
+          path.write_text(text)
+
+          path = Path('README.md')
+          text = path.read_text()
+          text = text.replace(
+              '最初に制作するのは、ゲーム内30日・実プレイ45〜70分の垂直スライスです。',
+              '現在は、シナリオより先に長期運営できるフリープレイの箱庭を構築しています。30日版は数値回帰テストとして残します。',
+          )
+          text = text.replace(
+              '- [実装バックログ](docs/backlog.md)\n',
+              '- [実装バックログ](docs/backlog.md)\n- [フリープレイ先行ロードマップ](docs/free-play-roadmap.md)\n- [AndroidデモAPK](docs/android-demo.md)\n',
+          )
+          text = text.replace(
+              'Playable 30-day vertical slice / browser UI / local playtest telemetry',
+              'Playable endless free play / browser UI / Android demo / local playtest telemetry',
+          )
+          path.write_text(text)
+
+          path = Path('package.json')
+          text = path.read_text()
+          text = text.replace(
+              'Convenience-store Frontier - 30-day vertical slice simulation and browser UI',
+              'Convenience-store Frontier - endless convenience-store management sandbox',
+          )
+          path.write_text(text)
+          PY
+
+      - name: Commit free-play foundation
+        run: |
+          git config user.name "free-play-foundation-bot"
+          git config user.email "free-play-foundation-bot@users.noreply.github.com"
+          git add package.json package-lock.json index.html README.md src docs capacitor.config.ts
+          git commit -m "feat: pivot default game to endless free play"
+          git push origin HEAD:agent/free-play-android-foundation
