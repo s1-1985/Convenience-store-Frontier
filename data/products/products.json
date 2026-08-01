@@ -1,0 +1,134 @@
+[
+  {
+    "id": "product_bento_makunouchi",
+    "category_id": "category_ready_to_eat",
+    "display_name": "幕の内弁当",
+    "retail_price": 450,
+    "cost": 260,
+    "shelf_life_slots": 56,
+    "package_units": 10,
+    "target_weight": 0.6,
+    "initial_stock": 60
+  },
+  {
+    "id": "product_onigiri_salmon",
+    "category_id": "category_ready_to_eat",
+    "display_name": "鮭おにぎり",
+    "retail_price": 140,
+    "cost": 70,
+    "shelf_life_slots": 56,
+    "package_units": 20,
+    "target_weight": 0.4,
+    "initial_stock": 60
+  },
+  {
+    "id": "product_bottled_tea",
+    "category_id": "category_beverages",
+    "display_name": "ペットボトル茶",
+    "retail_price": 150,
+    "cost": 90,
+    "shelf_life_slots": 1920,
+    "package_units": 24,
+    "target_weight": 0.5,
+    "initial_stock": 80
+  },
+  {
+    "id": "product_canned_coffee",
+    "category_id": "category_beverages",
+    "display_name": "缶コーヒー",
+    "retail_price": 160,
+    "cost": 95,
+    "shelf_life_slots": 1920,
+    "package_units": 24,
+    "target_weight": 0.5,
+    "initial_stock": 80
+  },
+  {
+    "id": "product_chocolate_bar",
+    "category_id": "category_snacks",
+    "display_name": "板チョコレート",
+    "retail_price": 130,
+    "cost": 70,
+    "shelf_life_slots": 2880,
+    "package_units": 20,
+    "target_weight": 0.5,
+    "initial_stock": 60
+  },
+  {
+    "id": "product_potato_chips",
+    "category_id": "category_snacks",
+    "display_name": "ポテトチップス",
+    "retail_price": 150,
+    "cost": 85,
+    "shelf_life_slots": 2880,
+    "package_units": 20,
+    "target_weight": 0.5,
+    "initial_stock": 60
+  },
+  {
+    "id": "product_instant_noodle",
+    "category_id": "category_processed_food",
+    "display_name": "カップ麺",
+    "retail_price": 200,
+    "cost": 110,
+    "shelf_life_slots": 960,
+    "package_units": 24,
+    "target_weight": 0.5,
+    "initial_stock": 70
+  },
+  {
+    "id": "product_frozen_gyoza",
+    "category_id": "category_processed_food",
+    "display_name": "冷凍餃子",
+    "retail_price": 380,
+    "cost": 220,
+    "shelf_life_slots": 2880,
+    "package_units": 12,
+    "target_weight": 0.5,
+    "initial_stock": 40
+  },
+  {
+    "id": "product_toothbrush",
+    "category_id": "category_daily_goods",
+    "display_name": "歯ブラシ",
+    "retail_price": 300,
+    "cost": 180,
+    "shelf_life_slots": 5760,
+    "package_units": 12,
+    "target_weight": 0.4,
+    "initial_stock": 30
+  },
+  {
+    "id": "product_tissue_pack",
+    "category_id": "category_daily_goods",
+    "display_name": "ティッシュパック",
+    "retail_price": 250,
+    "cost": 150,
+    "shelf_life_slots": 5760,
+    "package_units": 12,
+    "target_weight": 0.6,
+    "initial_stock": 40
+  },
+  {
+    "id": "product_newspaper",
+    "category_id": "category_magazines",
+    "display_name": "新聞",
+    "retail_price": 150,
+    "cost": 110,
+    "shelf_life_slots": 96,
+    "package_units": 30,
+    "target_weight": 0.6,
+    "initial_stock": 40
+  },
+  {
+    "id": "product_weekly_magazine",
+    "category_id": "category_magazines",
+    "display_name": "週刊誌",
+    "retail_price": 450,
+    "cost": 330,
+    "shelf_life_slots": 672,
+    "package_units": 10,
+    "target_weight": 0.4,
+    "initial_stock": 20
+  }
+]

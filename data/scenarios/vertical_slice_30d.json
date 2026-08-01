@@ -8,6 +8,7 @@
   "competitor_store_paths": ["stores/competitor_store.json"],
   "cohorts_path": "cohorts/customer_cohorts.json",
   "categories_path": "products/categories.json",
+  "products_path": "products/products.json",
   "time_blocks_path": "operations/time_blocks.json",
   "economy_path": "balance/economy.json"
 }

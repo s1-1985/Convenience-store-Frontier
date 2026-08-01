@@ -9,9 +9,22 @@ export interface TimeBlockDefinition {
 export interface CategoryDefinition {
   id: string;
   displayName: string;
-  avgRetailPrice: number;
-  avgCost: number;
 }
+
+export interface ProductDefinition {
+  id: string;
+  categoryId: string;
+  displayName: string;
+  retailPrice: number;
+  cost: number;
+  shelfLifeSlots: number;
+  packageUnits: number;
+  targetWeight: number;
+  initialStock: number;
+}
+
+export type OrderingPolicyId = "sell_through" | "standard" | "stockout_prevention";
+export type DeliveryPolicyId = "once_daily" | "ready_to_eat_twice_daily" | "all_categories_twice_daily";
 
 export interface ChoiceWeights {
   hours: number;
@@ -53,6 +66,8 @@ export interface StoreDefinition {
   reputation: number;
   distanceScore: number;
   initialCash: number;
+  orderingPolicy: OrderingPolicyId;
+  deliveryPolicy: DeliveryPolicyId;
 }
 
 export interface EconomyBalance {
@@ -62,6 +77,8 @@ export interface EconomyBalance {
   choiceSharpness: number;
   totalShelfAreaPoints: number;
   demandNoiseRange: number;
+  safetyStockRatio: number;
+  deliveryCostPerEvent: number;
 }
 
 export interface ScenarioDefinition {
@@ -78,6 +95,7 @@ export interface ScenarioBundle {
   competitorStores: StoreDefinition[];
   cohorts: CohortDefinition[];
   categories: CategoryDefinition[];
+  products: ProductDefinition[];
   timeBlocks: TimeBlockDefinition[];
   economy: EconomyBalance;
 }

@@ -22,5 +22,7 @@
   "cleanliness": 65,
   "reputation": 60,
   "distance_score": 70,
-  "initial_cash": 3000000
+  "initial_cash": 3000000,
+  "ordering_policy": "standard",
+  "delivery_policy": "once_daily"
 }
