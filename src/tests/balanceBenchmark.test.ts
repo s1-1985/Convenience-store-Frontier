@@ -6,6 +6,7 @@ import {
   BALANCE_STRATEGY_IDS,
   assessBalance,
   balanceBenchmarkToCsv,
+  diagnoseNoActionRun,
   getStrategyCommands,
   runBalanceBenchmark,
   type BalanceStrategySummary,
@@ -87,6 +88,22 @@ describe("balance benchmark", () => {
     const csv = balanceBenchmarkToCsv(report);
     expect(csv).toContain("strategy_id,seed,total_revenue");
     expect(csv.trim().split("\n")).toHaveLength(BALANCE_STRATEGY_IDS.length + 1);
+  });
+
+  it("実績を根拠に問題を1日目から4日目へ順番に提示できる", () => {
+    const diagnostic = diagnoseNoActionRun(scenario, 1);
+
+    expect([
+      diagnostic.morningOutflowDay,
+      diagnostic.lunchStockoutDay,
+      diagnostic.wasteDay,
+      diagnostic.closedDemandDay,
+    ]).toEqual([1, 2, 3, 4]);
+    expect(diagnostic.morningOutflowEvidenceDay).toBeLessThanOrEqual(1);
+    expect(diagnostic.lunchStockoutEvidenceDay).toBeLessThanOrEqual(2);
+    expect(diagnostic.wasteEvidenceDay).toBeLessThanOrEqual(3);
+    expect(diagnostic.closedDemandEvidenceDay).toBeLessThanOrEqual(4);
+    expect(diagnostic.ordered).toBe(true);
   });
 
   it("同じ戦略が全評価軸で首位なら独占と判定する", () => {
