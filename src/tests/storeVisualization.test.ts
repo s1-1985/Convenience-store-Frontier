@@ -160,7 +160,7 @@ describe("buildStoreVisualization", () => {
   it("地域定着度が高い時間帯では常連表示が発生する", () => {
     const model = buildStoreVisualization(
       scenario,
-      input({ regionalAdoption: { morning: 1 } }),
+      input({ regionalAdoption: { midday: 1 } }),
     );
 
     expect(model.customers.some((customer) => customer.regular)).toBe(true);
@@ -171,7 +171,7 @@ describe("buildStoreVisualization", () => {
     const state = input({
       queueCustomers: 2.5,
       shelfStockoutUnits: 4,
-      regionalAdoption: { morning: 0.7 },
+      regionalAdoption: { midday: 0.7 },
       workBacklog: 8,
       wasteCost: 1200,
     });
