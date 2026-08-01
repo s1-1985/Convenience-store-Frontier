@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#182318" />
+    <meta
+      name="description"
+      content="Convenience-store Frontier 30日版垂直スライスの経営画面"
+    />
+    <title>Convenience-store Frontier</title>
+    <link rel="stylesheet" href="/src/ui/styles.css" />
+  </head>
+  <body>
+    <div id="loading-screen" class="loading-screen">
+      <div class="loading-card">
+        <div class="loading-mark">CF</div>
+        <p id="loading-message">店舗データを読み込んでいる…</p>
+      </div>
+    </div>
+
+    <div id="app" class="app-shell" hidden>
+      <header class="topbar">
+        <div class="brand-block">
+          <p class="eyebrow">1977 / ASAHI STATION EAST</p>
+          <h1>Convenience-store Frontier</h1>
+          <p id="scenario-name" class="scenario-name"></p>
+        </div>
+        <div class="clock-block" aria-label="ゲーム時刻">
+          <span id="day-label" class="day-label">1日目</span>
+          <strong id="time-label" class="time-label">06:00</strong>
+          <span id="weather-label" class="weather-label">—</span>
+        </div>
+        <div class="cash-block">
+          <span>現金</span>
+          <strong id="cash-label">0円</strong>
+          <small id="status-label">営業準備中</small>
+        </div>
+      </header>
+
+      <section class="time-console panel" aria-label="時間操作">
+        <div class="time-buttons">
+          <button id="play-button" class="primary-button" type="button">▶ 再生</button>
+          <button id="slot-button" type="button">+15分</button>
+          <button id="day-button" type="button">翌日まで</button>
+          <button id="week-button" type="button">7日進行</button>
+          <button id="end-button" type="button">30日目まで</button>
+        </div>
+        <label class="inline-field">
+          速度
+          <select id="speed-select">
+            <option value="1">1倍</option>
+            <option value="4">4倍</option>
+            <option value="20">20倍</option>
+          </select>
+        </label>
+        <label class="checkbox-field">
+          <input id="auto-stop-checkbox" type="checkbox" checked />
+          重大問題で自動停止
+        </label>
+        <label class="inline-field seed-field">
+          シード
+          <input id="seed-input" type="number" value="1977" step="1" />
+        </label>
+        <button id="reset-button" class="ghost-button" type="button">最初から</button>
+      </section>
+
+      <main class="main-layout">
+        <section class="left-column">
+          <article class="panel store-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">STORE FLOOR</p>
+                <h2>店舗メイン画面</h2>
+              </div>
+              <span id="store-open-badge" class="status-badge">閉店中</span>
+            </div>
+
+            <div class="store-visual" aria-label="店舗状況">
+              <div class="store-zone entrance-zone">
+                <span>入口</span>
+                <strong id="visit-metric">—</strong>
+                <small>本日の来店</small>
+              </div>
+              <div class="store-zone shelf-zone">
+                <span>売場</span>
+                <strong id="shelf-metric">—</strong>
+                <small>棚欠品</small>
+              </div>
+              <div class="store-zone register-zone">
+                <span>レジ</span>
+                <strong id="queue-metric">0</strong>
+                <small>待ち人数</small>
+              </div>
+              <div class="store-zone backroom-zone">
+                <span>バックヤード</span>
+                <strong id="inventory-metric">—</strong>
+                <small>在庫個数</small>
+              </div>
+              <div class="store-zone work-zone">
+                <span>作業</span>
+                <strong id="backlog-metric">0</strong>
+                <small>積み残し</small>
+              </div>
+            </div>
+
+            <div class="kpi-grid">
+              <div class="kpi-card">
+                <span>直近日売上</span>
+                <strong id="revenue-kpi">—</strong>
+              </div>
+              <div class="kpi-card">
+                <span>直近日利益</span>
+                <strong id="profit-kpi">—</strong>
+              </div>
+              <div class="kpi-card">
+                <span>離脱客</span>
+                <strong id="abandon-kpi">—</strong>
+              </div>
+              <div class="kpi-card">
+                <span>廃棄原価</span>
+                <strong id="waste-kpi">—</strong>
+              </div>
+            </div>
+          </article>
+
+          <article class="panel alert-panel">
+            <div class="panel-heading compact-heading">
+              <div>
+                <p class="eyebrow">MANAGER NOTICES</p>
+                <h2>店長への通知</h2>
+              </div>
+              <span id="alert-count" class="count-badge">0件</span>
+            </div>
+            <div id="alerts-container" class="alerts-container"></div>
+            <p id="stop-reason" class="stop-reason" hidden></p>
+          </article>
+        </section>
+
+        <aside class="right-column">
+          <article class="panel policy-panel">
+            <div class="panel-heading compact-heading">
+              <div>
+                <p class="eyebrow">STORE POLICY</p>
+                <h2>経営方針</h2>
+              </div>
+              <button id="apply-policy-button" class="primary-button" type="button">方針を反映</button>
+            </div>
+
+            <div class="policy-section">
+              <h3>営業時間・発注</h3>
+              <div class="form-grid two-columns">
+                <label>開店<select id="opening-hour-select"></select></label>
+                <label>閉店<select id="closing-hour-select"></select></label>
+                <label>
+                  発注方針
+                  <select id="ordering-policy-select">
+                    <option value="sell_through">売り切り重視</option>
+                    <option value="standard">標準</option>
+                    <option value="stockout_prevention">欠品防止</option>
+                  </select>
+                </label>
+                <label>
+                  納品方式
+                  <select id="delivery-policy-select">
+                    <option value="once_daily">一日一回</option>
+                    <option value="ready_to_eat_twice_daily">即食食品のみ二回</option>
+                    <option value="all_categories_twice_daily">全カテゴリ二回</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+
+            <div class="policy-section">
+              <h3>時間帯別人員</h3>
+              <div id="staffing-controls" class="form-grid four-columns"></div>
+            </div>
+
+            <div class="policy-section">
+              <h3>作業優先順位</h3>
+              <div id="priority-controls" class="priority-list"></div>
+            </div>
+
+            <div class="policy-section">
+              <div class="section-title-row">
+                <h3>売場面積</h3>
+                <strong id="category-area-total">合計 70</strong>
+              </div>
+              <div id="category-area-controls" class="category-controls"></div>
+            </div>
+
+            <p id="policy-message" class="form-message" role="status"></p>
+          </article>
+        </aside>
+
+        <section class="panel report-panel">
+          <div class="panel-heading report-heading">
+            <div>
+              <p class="eyebrow">REPORTING DESK</p>
+              <h2>経営レポート</h2>
+            </div>
+            <label class="inline-field">
+              表示日
+              <select id="report-day-select"></select>
+            </label>
+          </div>
+
+          <nav class="report-tabs" aria-label="レポート切替">
+            <button class="tab-button active" data-tab="daily" type="button">日次</button>
+            <button class="tab-button" data-tab="inventory" type="button">在庫・欠品</button>
+            <button class="tab-button" data-tab="regional" type="button">地域</button>
+            <button class="tab-button" data-tab="competitor" type="button">競合</button>
+          </nav>
+
+          <div id="daily-report" class="report-content"></div>
+          <div id="inventory-report" class="report-content" hidden></div>
+          <div id="regional-report" class="report-content" hidden></div>
+          <div id="competitor-report" class="report-content" hidden></div>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="/src/ui/main.ts"></script>
+  </body>
+</html>
