@@ -11,6 +11,7 @@ on:
       - "package.json"
       - "package-lock.json"
       - "capacitor.config.ts"
+      - ".github/keys/demo-debug.keystore.b64"
       - ".github/workflows/android-demo.yml"
 
 jobs:
@@ -38,47 +39,80 @@ jobs:
         run: npm run build
 
       - name: Create Android project
+        env:
+          CSF_VERSION_CODE: ${{ github.run_number }}
         run: |
           rm -rf android
           npx cap add android
           npx cap sync android
           python - <<'PY'
           from pathlib import Path
+          import os
           import re
 
-          path = Path("android/app/src/main/AndroidManifest.xml")
-          text = path.read_text()
-          if 'android:screenOrientation="landscape"' not in text:
+          manifest_path = Path("android/app/src/main/AndroidManifest.xml")
+          manifest = manifest_path.read_text()
+          if 'android:screenOrientation="landscape"' not in manifest:
               pattern = r'(<activity\b(?=[^>]*android:name="\.MainActivity")[^>]*)(>)'
               updated, count = re.subn(
                   pattern,
                   r'\1\n            android:screenOrientation="landscape"\2',
-                  text,
+                  manifest,
                   count=1,
                   flags=re.DOTALL,
               )
               if count != 1:
                   raise SystemExit("Capacitor MainActivity element not found")
-              text = updated
-          path.write_text(text)
+              manifest = updated
+          manifest_path.write_text(manifest)
+
+          gradle_path = Path("android/app/build.gradle")
+          gradle = gradle_path.read_text()
+          version_code = os.environ["CSF_VERSION_CODE"]
+          gradle, count = re.subn(r"versionCode\s+\d+", f"versionCode {version_code}", gradle, count=1)
+          if count != 1:
+              raise SystemExit("Android versionCode not found")
+          gradle_path.write_text(gradle)
           PY
 
-      - name: Build installable debug APK
+      - name: Install fixed demo signing key
+        run: |
+          mkdir -p "$HOME/.android"
+          base64 -d .github/keys/demo-debug.keystore.b64 > "$HOME/.android/debug.keystore"
+          chmod 600 "$HOME/.android/debug.keystore"
+          printf '%s  %s\n' 'e0060b7c4614293cbc74505c5a8b9af4e8c64af651765f29524461dbdc065b06' "$HOME/.android/debug.keystore" | sha256sum -c -
+          keytool -list -v \
+            -keystore "$HOME/.android/debug.keystore" \
+            -storepass android \
+            -alias androiddebugkey | grep 'A4:45:79:07:F3:4E:3B:62:81:30:5F:B4:11:E0:A5:63:5F:CE:5B:4A:05:66:27:0B:A1:B3:24:0E:64:D5:11:BF'
+
+      - name: Build installable debug APK with fixed signing
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug
+          ./gradlew assembleDebug \
+            -Pandroid.injected.signing.store.file="$HOME/.android/debug.keystore" \
+            -Pandroid.injected.signing.store.password=android \
+            -Pandroid.injected.signing.key.alias=androiddebugkey \
+            -Pandroid.injected.signing.key.password=android
+
+      - name: Verify fixed APK signature
+        run: |
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          test -n "$APKSIGNER"
+          "$APKSIGNER" verify --verbose --print-certs android/app/build/outputs/apk/debug/app-debug.apk | tee /tmp/apksigner.txt
+          grep -i 'a4457907f34e3b6281305fb411e0a5635fce5b4a0566270ba1b3240e64d511bf' /tmp/apksigner.txt
 
       - name: Prepare APK
         run: |
-          cp android/app/build/outputs/apk/debug/app-debug.apk convenience-store-frontier-demo.apk
-          sha256sum convenience-store-frontier-demo.apk > convenience-store-frontier-demo.apk.sha256
+          cp android/app/build/outputs/apk/debug/app-debug.apk convenience-store-frontier-demo-fixed.apk
+          sha256sum convenience-store-frontier-demo-fixed.apk > convenience-store-frontier-demo-fixed.apk.sha256
 
       - uses: actions/upload-artifact@v4
         with:
-          name: convenience-store-frontier-android-demo
+          name: convenience-store-frontier-android-demo-fixed-signing
           path: |
-            convenience-store-frontier-demo.apk
-            convenience-store-frontier-demo.apk.sha256
+            convenience-store-frontier-demo-fixed.apk
+            convenience-store-frontier-demo-fixed.apk.sha256
           if-no-files-found: error
           retention-days: 30

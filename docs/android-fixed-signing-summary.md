@@ -1,0 +1,5 @@
+# Android固定署名対応の要約
+
+GitHub Actionsの一時ランナーごとに異なるdebug.keystoreが生成されていたため、旧APKを残したまま新APKを上書きできなかった。
+
+固定デモ鍵、証明書照合、versionCode連番化により、固定署名版を一度導入した後は上書き更新できる。
