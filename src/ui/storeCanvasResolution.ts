@@ -26,7 +26,10 @@ export function calculateCanvasDisplaySize(
     logicalWidth <= 0 ||
     logicalHeight <= 0
   ) {
-    return { width: Math.max(0, availableWidth), height: Math.max(0, availableHeight) };
+    return {
+      width: Math.max(0, Math.round(availableWidth)),
+      height: Math.max(0, Math.round(availableHeight)),
+    };
   }
   const aspect = logicalWidth / logicalHeight;
   let width = availableWidth;
@@ -35,7 +38,10 @@ export function calculateCanvasDisplaySize(
     height = availableHeight;
     width = height * aspect;
   }
-  return { width, height };
+  return {
+    width: Math.max(1, Math.round(width)),
+    height: Math.max(1, Math.round(height)),
+  };
 }
 
 export function configureHiDpiCanvas(
