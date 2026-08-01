@@ -1,0 +1,254 @@
+.store-layout-editor-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 1005;
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+  touch-action: none;
+  image-rendering: pixelated;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.store-layout-editor-canvas[hidden],
+.store-layout-editor-panel[hidden],
+.store-layout-editor-toast[hidden] {
+  display: none;
+}
+
+.store-layout-editor-panel {
+  position: absolute;
+  z-index: 1015;
+  top: max(42px, env(safe-area-inset-top));
+  right: max(10px, env(safe-area-inset-right));
+  width: min(330px, calc(100vw - 20px));
+  max-height: calc(100vh - 118px);
+  overflow: auto;
+  padding: 11px;
+  border: 3px solid #e2aa3b;
+  border-radius: 12px;
+  background: rgba(5, 22, 40, .97);
+  box-shadow: 0 14px 38px rgba(0, 0, 0, .68);
+  color: #fff4cf;
+  font-family: system-ui, -apple-system, "Noto Sans JP", sans-serif;
+}
+
+.store-layout-editor-panel header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 9px;
+}
+
+.store-layout-editor-panel header > div {
+  display: grid;
+  gap: 1px;
+}
+
+.store-layout-editor-panel header strong {
+  font-size: 19px;
+}
+
+.store-layout-editor-panel header small {
+  color: #9fc7dc;
+  font-size: 10px;
+}
+
+.store-layout-editor-panel button {
+  min-height: 38px;
+  border: 2px solid #d9a438;
+  border-radius: 8px;
+  background: linear-gradient(#174a78, #0b3155);
+  color: #fff4cf;
+  font-weight: 800;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.store-layout-editor-panel button:active {
+  transform: translateY(1px);
+}
+
+.store-layout-editor-panel button:disabled {
+  opacity: .4;
+  filter: grayscale(.65);
+}
+
+.layout-editor-selected {
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  border: 1px solid rgba(226, 170, 59, .6);
+  border-radius: 7px;
+  background: #102f4c;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.layout-editor-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 5px;
+  margin-bottom: 8px;
+}
+
+.layout-editor-metrics > div {
+  display: grid;
+  gap: 2px;
+  padding: 6px 3px;
+  border: 1px solid rgba(159, 199, 220, .34);
+  border-radius: 6px;
+  background: rgba(14, 52, 82, .82);
+  text-align: center;
+}
+
+.layout-editor-metrics span {
+  color: #9fc7dc;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.layout-editor-metrics b {
+  font-size: 13px;
+}
+
+.layout-editor-fixtures {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+  max-height: 116px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.layout-editor-fixtures button {
+  min-height: 34px;
+  padding: 3px 5px;
+  border-color: #4f89ab;
+  background: #123b5d;
+  font-size: 10px;
+}
+
+.layout-editor-fixtures button[aria-pressed="true"] {
+  border-color: #ffcf49;
+  background: linear-gradient(#856515, #5d430c);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .18);
+}
+
+.layout-editor-message {
+  min-height: 30px;
+  margin: 8px 0;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(139, 43, 43, .72);
+  color: #ffd9c8;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.layout-editor-message[data-valid="true"] {
+  background: rgba(22, 99, 73, .72);
+  color: #d7ffe9;
+}
+
+.layout-editor-tools,
+.layout-editor-decisions {
+  display: grid;
+  gap: 6px;
+}
+
+.layout-editor-tools {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.layout-editor-tools button {
+  font-size: 10px;
+}
+
+.layout-editor-decisions {
+  grid-template-columns: .8fr 1.5fr;
+  margin-top: 7px;
+}
+
+.layout-editor-apply {
+  border-color: #f0c64e !important;
+  background: linear-gradient(#38865c, #1c6042) !important;
+}
+
+.store-layout-editor-toast {
+  position: absolute;
+  z-index: 1030;
+  left: 50%;
+  bottom: 76px;
+  max-width: min(620px, calc(100vw - 32px));
+  transform: translateX(-50%);
+  padding: 10px 16px;
+  border: 2px solid #e2aa3b;
+  border-radius: 9px;
+  background: rgba(5, 22, 40, .96);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .52);
+  color: #fff4cf;
+  font-size: 13px;
+  font-weight: 800;
+  text-align: center;
+}
+
+#store-game-shell.layout-editor-open .store-game-nav {
+  pointer-events: none;
+  opacity: .55;
+}
+
+#store-game-shell.layout-editor-open .store-game-nav [data-game-action="store"] {
+  pointer-events: auto;
+  opacity: 1;
+}
+
+@media (max-height: 520px) {
+  .store-layout-editor-panel {
+    top: 37px;
+    right: 7px;
+    width: min(310px, calc(100vw - 14px));
+    max-height: calc(100vh - 99px);
+    padding: 8px;
+  }
+
+  .store-layout-editor-panel header {
+    margin-bottom: 5px;
+  }
+
+  .store-layout-editor-panel header strong {
+    font-size: 16px;
+  }
+
+  .layout-editor-selected,
+  .layout-editor-message {
+    margin-bottom: 5px;
+    padding: 5px 7px;
+  }
+
+  .layout-editor-metrics {
+    margin-bottom: 5px;
+  }
+
+  .layout-editor-metrics > div {
+    padding: 4px 2px;
+  }
+
+  .layout-editor-fixtures {
+    max-height: 72px;
+  }
+
+  .layout-editor-fixtures button,
+  .layout-editor-tools button,
+  .layout-editor-decisions button {
+    min-height: 31px;
+  }
+}
+
+@media (orientation: portrait) and (max-width: 800px) {
+  .store-layout-editor-panel,
+  .store-layout-editor-canvas,
+  .store-layout-editor-toast {
+    display: none !important;
+  }
+}
