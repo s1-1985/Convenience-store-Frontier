@@ -2,10 +2,11 @@ name: Assemble Milestone 13
 
 on:
   workflow_dispatch:
-  push:
-    branches: [agent/milestone-13-individual-store-loop]
+  pull_request:
+    branches: [main]
     paths:
       - ".github/workflows/assemble-m13.yml"
+      - ".m13/**"
 
 permissions:
   contents: write
