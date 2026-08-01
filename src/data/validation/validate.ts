@@ -1,4 +1,11 @@
-import type { CategoryDefinition, CohortDefinition, DistrictDefinition, EconomyBalance, StoreDefinition } from "../../simulation/types.js";
+import type {
+  CategoryDefinition,
+  CohortDefinition,
+  DistrictDefinition,
+  EconomyBalance,
+  ProductDefinition,
+  StoreDefinition,
+} from "../../simulation/types.js";
 
 export class DataValidationError extends Error {}
 
@@ -13,8 +20,28 @@ export function validateCategories(categories: readonly CategoryDefinition[]): v
   for (const category of categories) {
     assert(!seen.has(category.id), `Duplicate category id: ${category.id}`);
     seen.add(category.id);
-    assert(category.avgRetailPrice >= 0, `Category ${category.id} has negative retail price`);
-    assert(category.avgCost >= 0, `Category ${category.id} has negative cost`);
+  }
+}
+
+export function validateProducts(
+  products: readonly ProductDefinition[],
+  categories: readonly CategoryDefinition[],
+): void {
+  const seen = new Set<string>();
+  const categoryIds = new Set(categories.map((c) => c.id));
+  for (const product of products) {
+    assert(!seen.has(product.id), `Duplicate product id: ${product.id}`);
+    seen.add(product.id);
+    assert(
+      categoryIds.has(product.categoryId),
+      `Product ${product.id} references unknown category ${product.categoryId}`,
+    );
+    assert(product.retailPrice >= 0, `Product ${product.id} has negative retail price`);
+    assert(product.cost >= 0, `Product ${product.id} has negative cost`);
+    assert(product.shelfLifeSlots >= 1, `Product ${product.id} shelfLifeSlots must be at least 1`);
+    assert(product.packageUnits >= 1, `Product ${product.id} packageUnits must be at least 1`);
+    assert(product.targetWeight > 0, `Product ${product.id} targetWeight must be positive`);
+    assert(product.initialStock >= 0, `Product ${product.id} has negative initialStock`);
   }
 }
 

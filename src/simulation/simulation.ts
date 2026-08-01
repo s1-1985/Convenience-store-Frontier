@@ -7,12 +7,33 @@ import {
   timeBlockForSlot,
   type SimClock,
 } from "./clock.js";
-import { computeCohortPotentialDemand, rollWeather, weatherDemandMultiplier, type Weather } from "./demand.js";
-import { computeLaborCost, computeSalesFinance, computeUtilitiesCost } from "./finance.js";
-import { allocateCategoryUnits } from "./purchase.js";
+import { computeCohortPotentialDemand, rollWeather, type Weather } from "./demand.js";
+import {
+  computeDeliveryCost,
+  computeLaborCost,
+  computeSalesFinance,
+  computeUtilitiesCost,
+  computeWasteCost,
+} from "./finance.js";
+import {
+  absoluteSlot,
+  consumeFifo,
+  createInitialInventory,
+  expireBatches,
+  forecastDailyProductDemand,
+  planDailyOrders,
+  type InventoryBatch,
+} from "./inventory.js";
+import { allocateCategoryUnits, allocateProductUnits } from "./purchase.js";
 import { RandomStreams } from "./rng.js";
 import { computeStoreShares, evaluateStore, OTHER_OPTION_ID } from "./storeChoice.js";
-import type { ScenarioBundle, StoreDefinition, TimeBlockId } from "./types.js";
+import type {
+  DeliveryPolicyId,
+  OrderingPolicyId,
+  ScenarioBundle,
+  StoreDefinition,
+  TimeBlockId,
+} from "./types.js";
 import type { DailyReport } from "../reporting/dailyReport.js";
 
 const CATEGORY_AREA_CHANGE_THRESHOLD = 10;
@@ -23,7 +44,9 @@ const MAX_STAFFING = 4;
 export type PolicyCommand =
   | { type: "set_opening_hours"; openingHour: number; closingHour: number }
   | { type: "set_category_area"; categoryArea: Record<string, number> }
-  | { type: "set_staffing"; timeBlock: TimeBlockId; count: number };
+  | { type: "set_staffing"; timeBlock: TimeBlockId; count: number }
+  | { type: "set_ordering_policy"; policy: OrderingPolicyId }
+  | { type: "set_delivery_policy"; policy: DeliveryPolicyId };
 
 export interface SimulationSnapshot {
   day: number;
@@ -35,17 +58,20 @@ export interface SimulationSnapshot {
     closingHour: number;
     categoryArea: Record<string, number>;
     staffingByTimeBlock: Record<TimeBlockId, number>;
+    orderingPolicy: OrderingPolicyId;
+    deliveryPolicy: DeliveryPolicyId;
   };
 }
 
 interface DayAccumulator {
   weather: Weather;
-  revenue: number;
-  cogs: number;
   laborCost: number;
   utilitiesCost: number;
+  deliveryEventCount: number;
   visitsByStore: Record<string, number>;
-  salesUnitsByCategory: Record<string, number>;
+  soldUnitsByProduct: Record<string, number>;
+  stockoutUnitsByProduct: Record<string, number>;
+  wasteUnitsByProduct: Record<string, number>;
 }
 
 export interface Simulation {
@@ -59,15 +85,20 @@ export interface Simulation {
   isFinished(): boolean;
 }
 
+function addAmount(record: Record<string, number>, key: string, amount: number): void {
+  record[key] = (record[key] ?? 0) + amount;
+}
+
 function emptyAccumulator(weather: Weather): DayAccumulator {
   return {
     weather,
-    revenue: 0,
-    cogs: 0,
     laborCost: 0,
     utilitiesCost: 0,
+    deliveryEventCount: 0,
     visitsByStore: {},
-    salesUnitsByCategory: {},
+    soldUnitsByProduct: {},
+    stockoutUnitsByProduct: {},
+    wasteUnitsByProduct: {},
   };
 }
 
@@ -83,18 +114,94 @@ export function createSimulation(scenario: ScenarioBundle, seed: number): Simula
     scenario.timeBlocks.map((block) => [block.id, slotsInTimeBlock(block)]),
   ) as Record<TimeBlockId, number>;
 
+  const productsById = new Map(scenario.products.map((product) => [product.id, product]));
+  const categoryIdByProductId = new Map(scenario.products.map((product) => [product.id, product.categoryId]));
+
+  const inventoryByProduct = createInitialInventory(scenario.products);
+  const pendingDeliveries = new Map<
+    number,
+    { productId: string; quantity: number; arrivalAbsoluteSlot: number }[]
+  >();
+
   const dailyReports: DailyReport[] = [];
   let weather: Weather = rollWeather(scenario.district, randomStreams.stream("weather"));
   let accumulator = emptyAccumulator(weather);
 
-  function addVisit(storeId: string, amount: number): void {
-    accumulator.visitsByStore[storeId] = (accumulator.visitsByStore[storeId] ?? 0) + amount;
+  function applyDueDeliveries(currentAbsoluteSlot: number): void {
+    const deliveries = pendingDeliveries.get(currentAbsoluteSlot);
+    if (!deliveries || deliveries.length === 0) {
+      return;
+    }
+    for (const plan of deliveries) {
+      const product = productsById.get(plan.productId);
+      if (!product) {
+        continue;
+      }
+      const batch: InventoryBatch = {
+        productId: plan.productId,
+        quantity: plan.quantity,
+        arrivalSlot: currentAbsoluteSlot,
+        expirySlot: currentAbsoluteSlot + product.shelfLifeSlots,
+      };
+      inventoryByProduct[plan.productId] = [...(inventoryByProduct[plan.productId] ?? []), batch];
+    }
+    accumulator.deliveryEventCount += 1;
+    pendingDeliveries.delete(currentAbsoluteSlot);
+  }
+
+  function expireDueBatches(currentAbsoluteSlot: number): void {
+    for (const product of scenario.products) {
+      const { remaining, wastedQuantity } = expireBatches(
+        inventoryByProduct[product.id] ?? [],
+        currentAbsoluteSlot,
+      );
+      if (wastedQuantity > 0) {
+        inventoryByProduct[product.id] = remaining;
+        addAmount(accumulator.wasteUnitsByProduct, product.id, wastedQuantity);
+      }
+    }
+  }
+
+  function planNextDayOrders(): void {
+    if (clock.day + 1 > scenario.scenario.totalDays) {
+      return;
+    }
+    const forecast = forecastDailyProductDemand(
+      allStores,
+      playerStore.id,
+      scenario.cohorts,
+      scenario.categories,
+      scenario.products,
+      scenario.timeBlocks,
+      scenario.district,
+      scenario.economy,
+    );
+    const nextDayFirstSlotAbsolute = absoluteSlot(clock.day + 1, 0);
+    const orderPlans = planDailyOrders(
+      scenario.products,
+      forecast,
+      inventoryByProduct,
+      playerStore.orderingPolicy,
+      playerStore.deliveryPolicy,
+      scenario.economy,
+      nextDayFirstSlotAbsolute,
+    );
+    for (const plan of orderPlans) {
+      const list = pendingDeliveries.get(plan.arrivalAbsoluteSlot) ?? [];
+      list.push(plan);
+      pendingDeliveries.set(plan.arrivalAbsoluteSlot, list);
+    }
   }
 
   function processSlot(): void {
     if (finished) {
       throw new Error("Simulation already finished");
     }
+
+    const currentAbsoluteSlot = absoluteSlot(clock.day, clock.slot);
+    applyDueDeliveries(currentAbsoluteSlot);
+    expireDueBatches(currentAbsoluteSlot);
+
     const timeBlock = timeBlockForSlot(clock.slot, scenario.timeBlocks);
     const demandRng = randomStreams.stream("demand");
 
@@ -119,7 +226,7 @@ export function createSimulation(scenario: ScenarioBundle, seed: number): Simula
       const shares = computeStoreShares(evaluations, scenario.economy);
 
       for (const [storeId, share] of Object.entries(shares)) {
-        addVisit(storeId, potentialDemand * share);
+        addAmount(accumulator.visitsByStore, storeId, potentialDemand * share);
       }
 
       const playerVisits = potentialDemand * (shares[playerStore.id] ?? 0);
@@ -131,13 +238,22 @@ export function createSimulation(scenario: ScenarioBundle, seed: number): Simula
           scenario.categories,
           scenario.economy,
         );
-        for (const [categoryId, units] of Object.entries(categoryUnits)) {
-          accumulator.salesUnitsByCategory[categoryId] =
-            (accumulator.salesUnitsByCategory[categoryId] ?? 0) + units;
+        const desiredProductUnits = allocateProductUnits(categoryUnits, scenario.products);
+
+        for (const [productId, desired] of Object.entries(desiredProductUnits)) {
+          if (desired <= 0) {
+            continue;
+          }
+          const { remaining, soldQuantity } = consumeFifo(inventoryByProduct[productId] ?? [], desired);
+          inventoryByProduct[productId] = remaining;
+          if (soldQuantity > 0) {
+            addAmount(accumulator.soldUnitsByProduct, productId, soldQuantity);
+          }
+          const shortfall = desired - soldQuantity;
+          if (shortfall > 0) {
+            addAmount(accumulator.stockoutUnitsByProduct, productId, shortfall);
+          }
         }
-        const { revenue, cogs } = computeSalesFinance(categoryUnits, scenario.categories);
-        accumulator.revenue += revenue;
-        accumulator.cogs += cogs;
       }
     }
 
@@ -150,20 +266,40 @@ export function createSimulation(scenario: ScenarioBundle, seed: number): Simula
 
     const dayJustEnded = isLastSlotOfDay(clock);
     if (dayJustEnded) {
-      const profit = accumulator.revenue - accumulator.cogs - accumulator.laborCost - accumulator.utilitiesCost;
+      const { revenue, cogs } = computeSalesFinance(accumulator.soldUnitsByProduct, scenario.products);
+      const wasteCost = computeWasteCost(accumulator.wasteUnitsByProduct, scenario.products);
+      const deliveryCost = computeDeliveryCost(accumulator.deliveryEventCount, scenario.economy);
+      const profit =
+        revenue - cogs - accumulator.laborCost - accumulator.utilitiesCost - wasteCost - deliveryCost;
       cash += profit;
+
+      const salesUnitsByCategory: Record<string, number> = {};
+      for (const [productId, units] of Object.entries(accumulator.soldUnitsByProduct)) {
+        const categoryId = categoryIdByProductId.get(productId);
+        if (categoryId) {
+          addAmount(salesUnitsByCategory, categoryId, units);
+        }
+      }
+
       dailyReports.push({
         day: clock.day,
         weather: accumulator.weather,
-        revenue: accumulator.revenue,
-        cogs: accumulator.cogs,
+        revenue,
+        cogs,
         laborCost: accumulator.laborCost,
         utilitiesCost: accumulator.utilitiesCost,
+        wasteCost,
+        deliveryCost,
         profit,
         cashEnd: cash,
         visitsByStore: accumulator.visitsByStore,
-        salesUnitsByCategory: accumulator.salesUnitsByCategory,
+        salesUnitsByCategory,
+        salesUnitsByProduct: accumulator.soldUnitsByProduct,
+        stockoutUnitsByProduct: accumulator.stockoutUnitsByProduct,
+        wasteUnitsByProduct: accumulator.wasteUnitsByProduct,
       });
+
+      planNextDayOrders();
     }
 
     clock = nextClock(clock);
@@ -190,6 +326,8 @@ export function createSimulation(scenario: ScenarioBundle, seed: number): Simula
           closingHour: playerStore.closingHour,
           categoryArea: { ...playerStore.categoryArea },
           staffingByTimeBlock: { ...playerStore.staffingByTimeBlock },
+          orderingPolicy: playerStore.orderingPolicy,
+          deliveryPolicy: playerStore.deliveryPolicy,
         },
       };
     },
@@ -237,6 +375,14 @@ export function createSimulation(scenario: ScenarioBundle, seed: number): Simula
             throw new Error(`Staffing count must be within [${MIN_STAFFING},${MAX_STAFFING}]`);
           }
           playerStore.staffingByTimeBlock[command.timeBlock] = command.count;
+          break;
+        }
+        case "set_ordering_policy": {
+          playerStore.orderingPolicy = command.policy;
+          break;
+        }
+        case "set_delivery_policy": {
+          playerStore.deliveryPolicy = command.policy;
           break;
         }
       }
