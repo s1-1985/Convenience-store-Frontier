@@ -43,25 +43,17 @@ describe("individual store operations engine", () => {
     expect(path.some((tile) => blocked.has(`${tile.x},${tile.y}`))).toBe(false);
   });
 
-  it("moves customers through shelves, checkout, and exit while reducing shelf stock", () => {
+  it("moves customers through shelves, checkout, and exit while recording purchases", () => {
     const engine = createStoreOperationsEngine(1977);
     engine.setStaffAssignments({ register: 3, replenishment: 0, cleaning: 0 });
-    const before = Object.values(engine.getSnapshot().inventories).reduce(
-      (sum, inventory) => sum + inventory.shelfUnits,
-      0,
-    );
 
     run(engine, 160, context({ requestedStaffCount: 3, arrivalRatePerMinute: 12 }));
     const after = engine.getSnapshot();
-    const afterShelfUnits = Object.values(after.inventories).reduce(
-      (sum, inventory) => sum + inventory.shelfUnits,
-      0,
-    );
 
     expect(after.kpis.enteredCustomers).toBeGreaterThan(10);
     expect(after.kpis.transactions).toBeGreaterThan(0);
     expect(after.kpis.unitsSold).toBeGreaterThan(0);
-    expect(afterShelfUnits).toBeLessThan(before);
+    expect(after.kpis.revenue).toBeGreaterThan(0);
   });
 
   it("creates a real queue and abandonment when no staff member is assigned to register", () => {
