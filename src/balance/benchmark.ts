@@ -563,7 +563,6 @@ export function diagnoseNoActionRun(
     ordered,
   };
 }
-
 function summarizeNoAction(diagnostics: readonly NoActionDiagnostic[]): NoActionDiagnosticSummary {
   const count = Math.max(1, diagnostics.length);
   const rate = (predicate: (diagnostic: NoActionDiagnostic) => boolean): number =>
