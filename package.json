@@ -11,7 +11,9 @@
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "balance": "npm run build:core && node dist-core/balance/runBenchmark.js --seeds=100 --format=both",
+    "balance:ci": "npm run build:core && node dist-core/balance/runBenchmark.js --seeds=100 --format=summary --strict"
   },
   "devDependencies": {
     "@types/node": "^22.9.0",

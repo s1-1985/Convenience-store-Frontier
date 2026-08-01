@@ -30,3 +30,6 @@ jobs:
 
       - name: Build browser UI
         run: npm run build
+
+      - name: Run balance benchmark smoke test
+        run: npm run balance:ci
