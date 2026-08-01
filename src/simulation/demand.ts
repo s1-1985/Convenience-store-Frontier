@@ -25,6 +25,7 @@ export function computeCohortPotentialDemand(
   weather: Weather,
   economy: EconomyBalance,
   demandRng: RandomFn,
+  habitMultiplier = 1,
 ): number {
   // activityRateByTimeBlock is the share of the cohort shopping across the whole
   // time block, so it must be spread evenly over the slots that make up that block.
@@ -36,6 +37,7 @@ export function computeCohortPotentialDemand(
     baseRate *
     dayTypeFactor(district, day) *
     weatherDemandMultiplier(district, weather) *
-    noise;
+    noise *
+    habitMultiplier;
   return Math.max(0, demand);
 }
