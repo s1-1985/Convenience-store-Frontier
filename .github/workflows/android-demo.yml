@@ -86,11 +86,15 @@ jobs:
             -storepass android \
             -alias androiddebugkey | grep 'A4:45:79:07:F3:4E:3B:62:81:30:5F:B4:11:E0:A5:63:5F:CE:5B:4A:05:66:27:0B:A1:B3:24:0E:64:D5:11:BF'
 
-      - name: Build installable debug APK
+      - name: Build installable debug APK with fixed signing
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug
+          ./gradlew assembleDebug \
+            -Pandroid.injected.signing.store.file="$HOME/.android/debug.keystore" \
+            -Pandroid.injected.signing.store.password=android \
+            -Pandroid.injected.signing.key.alias=androiddebugkey \
+            -Pandroid.injected.signing.key.password=android
 
       - name: Verify fixed APK signature
         run: |
