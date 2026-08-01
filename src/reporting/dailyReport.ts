@@ -1,3 +1,5 @@
+import type { OperationTaskRecord } from "../simulation/operations.js";
+
 export interface DailyReport {
   day: number;
   weather: "clear" | "rain";
@@ -14,4 +16,12 @@ export interface DailyReport {
   salesUnitsByProduct: Record<string, number>;
   stockoutUnitsByProduct: Record<string, number>;
   wasteUnitsByProduct: Record<string, number>;
+  operationWorkloadByTask: OperationTaskRecord;
+  operationProcessedByTask: OperationTaskRecord;
+  operationBacklogByTask: OperationTaskRecord;
+  queueCustomersEnd: number;
+  abandonedCustomers: number;
+  operationalShelfStockoutUnits: number;
+  backroomInventoryUnitsEnd: number;
+  nightOperationWorkload: number;
 }
