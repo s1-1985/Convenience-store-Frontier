@@ -44,14 +44,22 @@ jobs:
           npx cap sync android
           python - <<'PY'
           from pathlib import Path
+          import re
+
           path = Path("android/app/src/main/AndroidManifest.xml")
           text = path.read_text()
-          marker = 'android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation"'
-          replacement = marker + '\n            android:screenOrientation="landscape"'
           if 'android:screenOrientation="landscape"' not in text:
-              if marker not in text:
-                  raise SystemExit("Capacitor activity marker not found")
-              text = text.replace(marker, replacement)
+              pattern = r'(<activity\b(?=[^>]*android:name="\.MainActivity")[^>]*)(>)'
+              updated, count = re.subn(
+                  pattern,
+                  r'\1\n            android:screenOrientation="landscape"\2',
+                  text,
+                  count=1,
+                  flags=re.DOTALL,
+              )
+              if count != 1:
+                  raise SystemExit("Capacitor MainActivity element not found")
+              text = updated
           path.write_text(text)
           PY
 
