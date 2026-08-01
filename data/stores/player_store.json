@@ -1,0 +1,26 @@
+{
+  "id": "store_player",
+  "display_name": "自社店舗",
+  "is_player_controlled": true,
+  "opening_hour": 8,
+  "closing_hour": 20,
+  "category_area": {
+    "category_ready_to_eat": 15,
+    "category_beverages": 12,
+    "category_snacks": 10,
+    "category_processed_food": 11,
+    "category_daily_goods": 12,
+    "category_magazines": 10
+  },
+  "staffing_by_time_block": {
+    "morning": 2,
+    "midday": 2,
+    "afternoon": 2,
+    "evening": 1
+  },
+  "price_index": 60,
+  "cleanliness": 70,
+  "reputation": 55,
+  "distance_score": 80,
+  "initial_cash": 3000000
+}

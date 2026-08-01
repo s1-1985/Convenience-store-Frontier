@@ -1,0 +1,26 @@
+{
+  "id": "store_competitor",
+  "display_name": "競合店",
+  "is_player_controlled": false,
+  "opening_hour": 7,
+  "closing_hour": 23,
+  "category_area": {
+    "category_ready_to_eat": 14,
+    "category_beverages": 12,
+    "category_snacks": 11,
+    "category_processed_food": 11,
+    "category_daily_goods": 12,
+    "category_magazines": 10
+  },
+  "staffing_by_time_block": {
+    "morning": 2,
+    "midday": 2,
+    "afternoon": 2,
+    "evening": 2
+  },
+  "price_index": 55,
+  "cleanliness": 65,
+  "reputation": 60,
+  "distance_score": 70,
+  "initial_cash": 3000000
+}

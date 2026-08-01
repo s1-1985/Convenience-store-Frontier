@@ -1,0 +1,92 @@
+[
+  {
+    "id": "cohort_commuter_worker",
+    "display_name": "通勤会社員",
+    "population": 1200,
+    "activity_rate_by_time_block": { "morning": 0.35, "midday": 0.05, "afternoon": 0.05, "evening": 0.15 },
+    "category_preference": {
+      "category_ready_to_eat": 0.35,
+      "category_beverages": 0.25,
+      "category_snacks": 0.05,
+      "category_processed_food": 0.05,
+      "category_daily_goods": 0.05,
+      "category_magazines": 0.05
+    },
+    "choice_weights": { "hours": 0.30, "assortment": 0.15, "price": 0.10, "cleanliness": 0.10, "reputation": 0.15, "distance": 0.20 }
+  },
+  {
+    "id": "cohort_lunch_worker",
+    "display_name": "昼休み会社員",
+    "population": 1000,
+    "activity_rate_by_time_block": { "morning": 0.05, "midday": 0.40, "afternoon": 0.05, "evening": 0.05 },
+    "category_preference": {
+      "category_ready_to_eat": 0.50,
+      "category_beverages": 0.20,
+      "category_snacks": 0.05,
+      "category_processed_food": 0.05,
+      "category_daily_goods": 0.02,
+      "category_magazines": 0.03
+    },
+    "choice_weights": { "hours": 0.15, "assortment": 0.30, "price": 0.10, "cleanliness": 0.10, "reputation": 0.10, "distance": 0.25 }
+  },
+  {
+    "id": "cohort_high_school_student",
+    "display_name": "高校生",
+    "population": 800,
+    "activity_rate_by_time_block": { "morning": 0.10, "midday": 0.05, "afternoon": 0.30, "evening": 0.10 },
+    "category_preference": {
+      "category_ready_to_eat": 0.10,
+      "category_beverages": 0.25,
+      "category_snacks": 0.35,
+      "category_processed_food": 0.05,
+      "category_daily_goods": 0.05,
+      "category_magazines": 0.20
+    },
+    "choice_weights": { "hours": 0.10, "assortment": 0.20, "price": 0.30, "cleanliness": 0.05, "reputation": 0.10, "distance": 0.25 }
+  },
+  {
+    "id": "cohort_family",
+    "display_name": "家庭客",
+    "population": 1500,
+    "activity_rate_by_time_block": { "morning": 0.10, "midday": 0.10, "afternoon": 0.20, "evening": 0.15 },
+    "category_preference": {
+      "category_ready_to_eat": 0.10,
+      "category_beverages": 0.15,
+      "category_snacks": 0.10,
+      "category_processed_food": 0.30,
+      "category_daily_goods": 0.30,
+      "category_magazines": 0.05
+    },
+    "choice_weights": { "hours": 0.10, "assortment": 0.20, "price": 0.15, "cleanliness": 0.15, "reputation": 0.20, "distance": 0.20 }
+  },
+  {
+    "id": "cohort_elderly",
+    "display_name": "高齢者",
+    "population": 900,
+    "activity_rate_by_time_block": { "morning": 0.10, "midday": 0.15, "afternoon": 0.15, "evening": 0.02 },
+    "category_preference": {
+      "category_ready_to_eat": 0.15,
+      "category_beverages": 0.10,
+      "category_snacks": 0.10,
+      "category_processed_food": 0.25,
+      "category_daily_goods": 0.30,
+      "category_magazines": 0.10
+    },
+    "choice_weights": { "hours": 0.05, "assortment": 0.15, "price": 0.15, "cleanliness": 0.25, "reputation": 0.20, "distance": 0.20 }
+  },
+  {
+    "id": "cohort_night_worker",
+    "display_name": "単身者・工場勤務者",
+    "population": 700,
+    "activity_rate_by_time_block": { "morning": 0.05, "midday": 0.05, "afternoon": 0.10, "evening": 0.35 },
+    "category_preference": {
+      "category_ready_to_eat": 0.30,
+      "category_beverages": 0.25,
+      "category_snacks": 0.15,
+      "category_processed_food": 0.10,
+      "category_daily_goods": 0.15,
+      "category_magazines": 0.05
+    },
+    "choice_weights": { "hours": 0.35, "assortment": 0.10, "price": 0.25, "cleanliness": 0.05, "reputation": 0.05, "distance": 0.20 }
+  }
+]

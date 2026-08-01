@@ -1,0 +1,8 @@
+{
+  "id": "district_asahi_station_east",
+  "display_name": "旭駅東地区",
+  "weekday_factor": 1.0,
+  "weekend_factor": 0.85,
+  "rain_probability": 0.15,
+  "rain_demand_multiplier": 0.8
+}

@@ -1,0 +1,38 @@
+[
+  {
+    "id": "category_ready_to_eat",
+    "display_name": "即食食品",
+    "avg_retail_price": 450,
+    "avg_cost": 260
+  },
+  {
+    "id": "category_beverages",
+    "display_name": "飲料",
+    "avg_retail_price": 150,
+    "avg_cost": 90
+  },
+  {
+    "id": "category_snacks",
+    "display_name": "菓子",
+    "avg_retail_price": 130,
+    "avg_cost": 75
+  },
+  {
+    "id": "category_processed_food",
+    "display_name": "加工食品",
+    "avg_retail_price": 300,
+    "avg_cost": 180
+  },
+  {
+    "id": "category_daily_goods",
+    "display_name": "日用品",
+    "avg_retail_price": 400,
+    "avg_cost": 260
+  },
+  {
+    "id": "category_magazines",
+    "display_name": "雑誌・新聞",
+    "avg_retail_price": 500,
+    "avg_cost": 400
+  }
+]
