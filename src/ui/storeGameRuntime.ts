@@ -13,6 +13,10 @@ import {
   type StoreStaffTask,
   type TilePoint,
 } from "../game/storeOperationsEngine.js";
+import {
+  createStoreLayoutEditorUi,
+  loadSavedStoreLayout,
+} from "./storeLayoutEditorUi.js";
 import "./storeGame.css";
 
 const LOGICAL_WIDTH = 1080;
@@ -581,7 +585,10 @@ function start(): void {
 
   const seed = Math.round(numberFrom(optional<HTMLInputElement>("seed-input")?.value) || 1977);
   const saved = readSavedEngine();
-  let engine = saved ? restoreStoreOperationsEngine(saved) : createStoreOperationsEngine(seed);
+  const savedLayout = loadSavedStoreLayout();
+  let engine = saved
+    ? restoreStoreOperationsEngine(saved, savedLayout)
+    : createStoreOperationsEngine(seed, savedLayout);
   let layout = engine.getLayout();
   let lastTimestamp = performance.now();
   let lastSaveTimestamp = lastTimestamp;
@@ -594,6 +601,13 @@ function start(): void {
     knownDay = currentDay();
   };
   bindNavigation(shell, getEngine, replaceEngine);
+  createStoreLayoutEditorUi({
+    shell,
+    canvas,
+    getEngine,
+    replaceEngine,
+    canEdit: () => !isPlaying() && engine.getSnapshot().customers.length === 0,
+  });
 
   engine.advance(0.01, engineContext());
 
