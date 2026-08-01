@@ -10,6 +10,7 @@ import {
   createSimulation as createCoreSimulation,
   type PolicyCommand,
   type Simulation,
+  type SimulationOptions,
   type SimulationSnapshot,
 } from "./simulation.js";
 import type { ScenarioBundle, StoreDefinition } from "./types.js";
@@ -57,9 +58,10 @@ function clamp01(value: number): number {
 export function createCompetitiveSimulation(
   scenario: ScenarioBundle,
   seed: number,
+  options: SimulationOptions = {},
 ): CompetitiveSimulation {
   const competitiveScenario = cloneScenario(scenario);
-  const core = createCoreSimulation(competitiveScenario, seed);
+  const core = createCoreSimulation(competitiveScenario, seed, options);
   const competitorStoreIds = competitiveScenario.competitorStores.map((store) => store.id);
   const competitorAI = createCompetitorAI(
     competitiveScenario.competitorStores,
@@ -142,10 +144,8 @@ export function createCompetitiveSimulation(
     },
 
     runToEnd(): void {
-      while (!core.isFinished()) {
-        core.advanceDay();
-        syncCompletedDays();
-      }
+      core.runToEnd();
+      syncCompletedDays();
     },
 
     isFinished(): boolean {

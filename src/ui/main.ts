@@ -1,8 +1,5 @@
-import {
-  createCompetitiveSimulation,
-  type CompetitiveDailyReport,
-  type CompetitiveSimulation,
-} from "../simulation/competitiveSimulation.js";
+import type { CompetitiveDailyReport } from "../simulation/competitiveSimulation.js";
+import type { FreePlaySimulation } from "../simulation/freePlaySimulation.js";
 import type { OperationTaskId } from "../simulation/operations.js";
 import type {
   DeliveryPolicyId,
@@ -11,6 +8,11 @@ import type {
   TimeBlockId,
 } from "../simulation/types.js";
 import { loadBrowserScenario } from "./browserScenario.js";
+import {
+  clearBrowserFreePlaySave,
+  createBrowserFreePlaySession,
+  type BrowserFreePlaySession,
+} from "./browserFreePlaySession.js";
 import {
   buildDashboardAlerts,
   COMPETITOR_ACTION_LABELS,
@@ -82,7 +84,8 @@ function parseInteger(input: HTMLInputElement | HTMLSelectElement): number {
 }
 
 let scenario: ScenarioBundle;
-let simulation: CompetitiveSimulation;
+let browserSession: BrowserFreePlaySession;
+let simulation: FreePlaySimulation;
 let selectedTab = "daily";
 let selectedReportDay: number | undefined;
 let timerId: number | undefined;
@@ -191,44 +194,25 @@ function afterAdvance(checkAutoStop: boolean): void {
       autoStopForLatestReport();
     }
   }
-  if (simulation.isFinished()) {
-    stopPlayback("30日間の営業を完了した");
-  }
   render();
 }
 
 function advanceDays(days: number): void {
   stopPlayback();
   lastStopReason = "";
-  for (let i = 0; i < days && !simulation.isFinished(); i += 1) {
+  for (let i = 0; i < days; i += 1) {
     simulation.advanceDay();
     previousReportCount = simulation.getAllDailyReports().length;
     selectedReportDay = latestReport()?.day;
     if (autoStopForLatestReport()) {
       break;
     }
-  }
-  if (simulation.isFinished()) {
-    lastStopReason = "30日間の営業を完了した";
   }
   render();
 }
 
 function runToEnd(): void {
-  stopPlayback();
-  lastStopReason = "";
-  while (!simulation.isFinished()) {
-    simulation.advanceDay();
-    previousReportCount = simulation.getAllDailyReports().length;
-    selectedReportDay = latestReport()?.day;
-    if (autoStopForLatestReport()) {
-      break;
-    }
-  }
-  if (simulation.isFinished()) {
-    lastStopReason = "30日間の営業を完了した";
-  }
-  render();
+  advanceDays(30);
 }
 
 function populateHourSelect(select: HTMLSelectElement): void {
@@ -383,7 +367,10 @@ function applyPolicies(): void {
 
 function resetSimulation(showMessage = true): void {
   stopPlayback();
-  simulation = createCompetitiveSimulation(scenario, currentSeed());
+  clearBrowserFreePlaySave();
+  browserSession = createBrowserFreePlaySession(scenario, currentSeed());
+  simulation = browserSession.simulation;
+  seedInput.value = String(browserSession.seed);
   previousReportCount = 0;
   selectedReportDay = undefined;
   lastStopReason = "";
@@ -776,12 +763,8 @@ function render(): void {
   renderReportDaySelect(reports);
   renderReports();
 
-  const finished = snapshot.finished;
   for (const id of ["play-button", "slot-button", "day-button", "week-button", "end-button"]) {
-    element<HTMLButtonElement>(id).disabled = finished;
-  }
-  if (finished) {
-    playButton.textContent = "営業完了";
+    element<HTMLButtonElement>(id).disabled = false;
   }
 }
 
@@ -819,14 +802,24 @@ function bindEvents(): void {
 async function initialize(): Promise<void> {
   try {
     scenario = await loadBrowserScenario();
-    element<HTMLElement>("scenario-name").textContent = `${scenario.scenario.displayName} / ${scenario.district.displayName}`;
+    element<HTMLElement>("scenario-name").textContent = `フリープレイ / ${scenario.district.displayName}`;
     buildPolicyControls();
+    browserSession = createBrowserFreePlaySession(scenario, currentSeed());
+    simulation = browserSession.simulation;
+    seedInput.value = String(browserSession.seed);
     bindEvents();
-    simulation = createCompetitiveSimulation(scenario, currentSeed());
     syncPolicyForm();
+    if (browserSession.restored) {
+      policyMessage.textContent = `${simulation.getSnapshot().day}日目の自動保存から再開した。`;
+      policyMessage.className = "form-message success-message";
+    }
     render();
     loadingScreen.hidden = true;
     app.hidden = false;
+    window.addEventListener("beforeunload", () => browserSession.flushSave());
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) browserSession.flushSave();
+    });
   } catch (error) {
     loadingMessage.textContent = error instanceof Error ? error.message : "初期化に失敗した";
     loadingScreen.classList.add("loading-error");

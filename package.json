@@ -2,7 +2,7 @@
   "name": "convenience-store-frontier",
   "version": "0.1.0",
   "private": true,
-  "description": "Convenience-store Frontier - 30-day vertical slice simulation and browser UI",
+  "description": "Convenience-store Frontier - endless convenience-store management sandbox",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -16,9 +16,14 @@
     "balance:ci": "npm run build:core && node dist-core/balance/runBenchmark.js --seeds=100 --format=summary --strict"
   },
   "devDependencies": {
+    "@capacitor/cli": "8.4.2",
     "@types/node": "^22.9.0",
     "typescript": "^5.6.3",
     "vite": "^6.0.5",
     "vitest": "^2.1.4"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.4.2",
+    "@capacitor/core": "8.4.2"
   }
 }

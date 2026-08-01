@@ -85,3 +85,14 @@ export type {
 } from "./balance/benchmark.js";
 export type { DailyReport } from "./reporting/dailyReport.js";
 export type * from "./simulation/types.js";
+
+export {
+  createFreePlaySimulation,
+  isFreePlaySave,
+  parseFreePlaySave,
+} from "./simulation/freePlaySimulation.js";
+export type {
+  FreePlayCommandEvent,
+  FreePlaySave,
+  FreePlaySimulation,
+} from "./simulation/freePlaySimulation.js";

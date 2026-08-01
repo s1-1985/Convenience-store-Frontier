@@ -88,7 +88,7 @@ function currentSeed(): number {
 }
 
 function scenarioName(): string {
-  return optionalElement("scenario-name")?.textContent?.trim() || "30日版垂直スライス";
+  return optionalElement("scenario-name")?.textContent?.trim() || "フリープレイ";
 }
 
 function readNumericInputs(selector: string): Record<string, number> {
@@ -193,12 +193,20 @@ function startNewSession(): void {
   queueRender();
 }
 
-function recoverInterruptedSession(): void {
+function recoverInterruptedSession(): PlaytestSession | null {
   const stored = readStorage<unknown>(ACTIVE_STORAGE_KEY, null);
-  if (isPlaytestSession(stored) && !stored.finished) {
-    archive(finishPlaytestSession(stored, "reloaded", Date.now()));
+  if (!isPlaytestSession(stored)) {
+    removeStorage(ACTIVE_STORAGE_KEY);
+    return null;
   }
-  removeStorage(ACTIVE_STORAGE_KEY);
+  if (stored.finished) {
+    archive(stored);
+    removeStorage(ACTIVE_STORAGE_KEY);
+    return null;
+  }
+  const resumed = resumePlaytestSession(stored, Date.now());
+  writeStorage(ACTIVE_STORAGE_KEY, resumed);
+  return resumed;
 }
 
 function escapeHtml(value: string): string {
@@ -274,7 +282,7 @@ function renderPanel(): void {
     </div>
     <div class="playtest-metrics">
       <div><span>実時間</span><strong>${formatDuration(assessment.durationMinutes)}</strong></div>
-      <div><span>完了日</span><strong>${session.completedDay}/30</strong></div>
+      <div><span>経過日</span><strong>${session.completedDay}日</strong></div>
       <div><span>重要判断</span><strong>${assessment.meaningfulDecisionCount}/6</strong></div>
       <div><span>数値前の気づき</span><strong>${formatPercent(assessment.visualDiscoveryRate)}</strong></div>
     </div>
@@ -285,8 +293,8 @@ function renderPanel(): void {
       <div class="playtest-detection-grid">${detectionButtons}</div>
     </section>
     <div class="playtest-checks ${resultClass}">
-      <div><span>${assessment.completedThirtyDays ? "✓" : "○"}</span>30日完走</div>
-      <div><span>${assessment.durationInTargetRange ? "✓" : "○"}</span>45〜70分</div>
+      <div><span>${assessment.completedThirtyDays ? "✓" : "○"}</span>30日到達</div>
+      <div><span>●</span>終了条件なし</div>
       <div><span>${assessment.minimumDecisionsMet ? "✓" : "○"}</span>重要判断6回</div>
       <div><span>${assessment.visualDiscoveryTargetMet ? "✓" : "○"}</span>3現象以上・60%</div>
     </div>
@@ -299,7 +307,7 @@ function renderPanel(): void {
       <button type="button" class="primary-button" data-playtest-action="export">JSON出力</button>
       <button type="button" class="ghost-button" data-playtest-action="clear">保存履歴を消去</button>
     </div>
-    <p class="playtest-note">操作、方針変更、気づき、完走時間を記録する。ネットワーク送信は行わない。</p>
+    <p class="playtest-note">フリープレイの操作、方針変更、気づき、継続時間を記録する。ネットワーク送信は行わない。</p>
   `;
 }
 
@@ -398,9 +406,6 @@ function synchronizeDomState(): void {
   }
 
   captureFinalEvaluation();
-  const completed =
-    session.completedDay >= 30 || optionalElement("play-button")?.textContent?.includes("営業完了");
-  if (completed && !session.finished) finishCurrent("completed");
   persist();
   queueRender();
 }
@@ -519,8 +524,8 @@ function start(): void {
   }
 
   history = loadHistory();
-  recoverInterruptedSession();
-  startNewSession();
+  session = recoverInterruptedSession();
+  if (!session) startNewSession();
   document.addEventListener("click", handleClick);
   document.addEventListener("visibilitychange", () => {
     if (!session || session.finished) return;
