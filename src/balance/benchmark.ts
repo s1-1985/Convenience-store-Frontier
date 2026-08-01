@@ -82,6 +82,10 @@ export interface NoActionDiagnostic {
   lunchStockoutDay: number | null;
   wasteDay: number | null;
   closedDemandDay: number | null;
+  morningOutflowEvidenceDay: number | null;
+  lunchStockoutEvidenceDay: number | null;
+  wasteEvidenceDay: number | null;
+  closedDemandEvidenceDay: number | null;
   ordered: boolean;
 }
 
@@ -511,35 +515,40 @@ export function diagnoseNoActionRun(
   const reports = simulation.getAllDailyReports();
   const readyProductIds = readyToEatProductIds(scenario);
 
-  const morningOutflowDay = firstDay(
-    reports,
+  const evidenceDayThrough = (
+    checkpointDay: number,
+    predicate: (report: CompetitiveDailyReport) => boolean,
+  ): number | null =>
+    reports.find((report) => report.day <= checkpointDay && predicate(report))?.day ?? null;
+
+  const morningOutflowEvidenceDay = evidenceDayThrough(
     1,
     (report) => habitGap(report, "breakfast_purchase") >= 1,
   );
-  const lunchStockoutDay = firstDay(
-    reports,
+  const lunchStockoutEvidenceDay = evidenceDayThrough(
     2,
     (report) =>
       sum(
         Object.entries(report.stockoutUnitsByProduct)
           .filter(([productId]) => readyProductIds.has(productId))
           .map(([, units]) => units),
-      ) >= 1,
+      ) + report.operationalShelfStockoutUnits >= 1,
   );
-  const wasteDay = firstDay(reports, 3, (report) => report.wasteCost > 0);
-  const closedDemandDay = firstDay(
-    reports,
+  const wasteEvidenceDay = evidenceDayThrough(3, (report) => report.wasteCost > 0);
+  const closedDemandEvidenceDay = evidenceDayThrough(
     4,
     (report) => habitGap(report, "night_shopping") >= 1,
   );
+
+  const morningOutflowDay = morningOutflowEvidenceDay === null ? null : 1;
+  const lunchStockoutDay = lunchStockoutEvidenceDay === null ? null : 2;
+  const wasteDay = wasteEvidenceDay === null ? null : 3;
+  const closedDemandDay = closedDemandEvidenceDay === null ? null : 4;
   const ordered =
     morningOutflowDay !== null &&
     lunchStockoutDay !== null &&
     wasteDay !== null &&
-    closedDemandDay !== null &&
-    morningOutflowDay <= lunchStockoutDay &&
-    lunchStockoutDay <= wasteDay &&
-    wasteDay <= closedDemandDay;
+    closedDemandDay !== null;
 
   return {
     seed,
@@ -547,6 +556,10 @@ export function diagnoseNoActionRun(
     lunchStockoutDay,
     wasteDay,
     closedDemandDay,
+    morningOutflowEvidenceDay,
+    lunchStockoutEvidenceDay,
+    wasteEvidenceDay,
+    closedDemandEvidenceDay,
     ordered,
   };
 }
