@@ -20,18 +20,14 @@ jobs:
       - name: Separate evidence days from campaign checkpoint days
         run: |
           python - <<'PY'
+          import re
+          import textwrap
           from pathlib import Path
+
           path = Path('src/balance/benchmark.ts')
           text = path.read_text()
-          old_interface = '''export interface NoActionDiagnostic {
-            seed: number;
-            morningOutflowDay: number | null;
-            lunchStockoutDay: number | null;
-            wasteDay: number | null;
-            closedDemandDay: number | null;
-            ordered: boolean;
-          }'''
-          new_interface = '''export interface NoActionDiagnostic {
+          new_interface = textwrap.dedent('''
+          export interface NoActionDiagnostic {
             seed: number;
             morningOutflowDay: number | null;
             lunchStockoutDay: number | null;
@@ -42,13 +38,22 @@ jobs:
             wasteEvidenceDay: number | null;
             closedDemandEvidenceDay: number | null;
             ordered: boolean;
-          }'''
-          if old_interface not in text:
-              raise SystemExit('NoActionDiagnostic interface not found')
-          text = text.replace(old_interface, new_interface)
+          }
+          ''').strip()
+          text, count = re.subn(
+              r'export interface NoActionDiagnostic \{.*?\n\}',
+              new_interface,
+              text,
+              count=1,
+              flags=re.S,
+          )
+          if count != 1:
+              raise SystemExit(f'NoActionDiagnostic replacements: {count}')
+
           start = text.index('export function diagnoseNoActionRun(')
           end = text.index('\nfunction summarizeNoAction(', start)
-          replacement = '''export function diagnoseNoActionRun(
+          replacement = textwrap.dedent('''
+          export function diagnoseNoActionRun(
             scenario: ScenarioBundle,
             seed: number,
           ): NoActionDiagnostic {
@@ -105,7 +110,7 @@ jobs:
               ordered,
             };
           }
-          '''
+          ''').strip()
           text = text[:start] + replacement + text[end:]
           path.write_text(text)
           PY
