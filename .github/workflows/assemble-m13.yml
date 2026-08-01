@@ -22,10 +22,10 @@ jobs:
       - name: Assemble source files
         run: |
           mkdir -p src/game src/ui src/tests
-          cat .m13/engine.* | base64 -d > src/game/storeOperationsEngine.ts
-          cat .m13/runtime.* | base64 -d > src/ui/storeGameRuntime.ts
-          cat .m13/css.* | base64 -d > src/ui/storeGame.css
-          cat .m13/test.* | base64 -d > src/tests/storeOperationsEngine.test.ts
+          for file in .m13/engine.*; do base64 -d "$file"; done > src/game/storeOperationsEngine.ts
+          for file in .m13/runtime.*; do base64 -d "$file"; done > src/ui/storeGameRuntime.ts
+          for file in .m13/css.*; do base64 -d "$file"; done > src/ui/storeGame.css
+          for file in .m13/test.*; do base64 -d "$file"; done > src/tests/storeOperationsEngine.test.ts
           rm -rf .m13
           rm -f .github/workflows/assemble-m13.yml
           git config user.name "github-actions[bot]"
