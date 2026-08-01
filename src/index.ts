@@ -124,3 +124,26 @@ export type {
   StoreStaffTask,
   TilePoint,
 } from "./game/storeOperationsEngine.js";
+
+export {
+  cloneStoreLayout,
+  createStoredStoreLayout,
+  editableStoreFixtureIds,
+  evaluateStoreLayout,
+  isEditableStoreFixture,
+  moveStoreFixture,
+  parseStoredStoreLayout,
+  prepareOperationsForStoreLayout,
+  rotateStoreFixtureClockwise,
+  storeFixtureAtTile,
+  storeFixtureBounds,
+} from "./game/storeLayoutEditor.js";
+export type {
+  FixtureBounds,
+  StoredStoreLayout,
+  StoreLayoutEvaluation,
+  StoreLayoutHotspot,
+  StoreLayoutIssue,
+  StoreLayoutIssueCode,
+  StoreLayoutMetrics,
+} from "./game/storeLayoutEditor.js";
