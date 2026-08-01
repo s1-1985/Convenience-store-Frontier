@@ -33,6 +33,7 @@ jobs:
               "test": (Path("src/tests/storeOperationsEngine.test.ts"), "b69e3c9c1f2e7e023b1815827c0fa0655af190321eb4b213028a573c00c17a52"),
           }
 
+          mismatches = []
           for prefix, (target, expected) in targets.items():
               target.parent.mkdir(parents=True, exist_ok=True)
               output = bytearray()
@@ -41,12 +42,15 @@ jobs:
                   raw += "=" * ((-len(raw)) % 4)
                   output.extend(base64.b64decode(raw, validate=False))
               digest = hashlib.sha256(output).hexdigest()
-              print(prefix, len(output), digest)
+              print(prefix, len(output), digest, "expected", expected)
               for chunk in sorted(Path(".m13").glob(f"{prefix}.*")):
                   print("  ", chunk.name, hashlib.sha256(chunk.read_bytes()).hexdigest(), chunk.stat().st_size)
               if digest != expected:
-                  raise SystemExit(f"{prefix} digest mismatch: {digest} != {expected}")
-              target.write_bytes(output)
+                  mismatches.append(prefix)
+              else:
+                  target.write_bytes(output)
+          if mismatches:
+              raise SystemExit("digest mismatch: " + ", ".join(mismatches))
           PY
           rm -rf .m13
           rm -f .github/workflows/assemble-m13.yml
