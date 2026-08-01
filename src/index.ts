@@ -58,5 +58,30 @@ export type {
   CampaignUpdate,
   CompanyHistoryEntry,
 } from "./campaign/campaign.js";
+export {
+  BALANCE_KPI_KEYS,
+  BALANCE_STRATEGY_IDS,
+  assessBalance,
+  balanceBenchmarkToCsv,
+  diagnoseNoActionRun,
+  formatBalanceSummary,
+  getBalanceStrategyDefinitions,
+  getStrategyCommands,
+  runBalanceBenchmark,
+  runBalanceStrategy,
+} from "./balance/benchmark.js";
+export type {
+  BalanceAssessment,
+  BalanceBenchmarkOptions,
+  BalanceBenchmarkReport,
+  BalanceKpiKey,
+  BalanceStrategyDefinition,
+  BalanceStrategyId,
+  BalanceStrategySummary,
+  MetricDistribution,
+  NoActionDiagnostic,
+  NoActionDiagnosticSummary,
+  StrategyRunKpis,
+} from "./balance/benchmark.js";
 export type { DailyReport } from "./reporting/dailyReport.js";
 export type * from "./simulation/types.js";
