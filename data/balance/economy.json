@@ -1,0 +1,8 @@
+{
+  "wage_per_staff_per_slot": 250,
+  "utilities_per_slot_open": 200,
+  "other_option_utility": 0.4,
+  "choice_sharpness": 6,
+  "total_shelf_area_points": 70,
+  "demand_noise_range": 0.1
+}

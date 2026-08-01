@@ -1,0 +1,13 @@
+{
+  "data_version": "0.1.0",
+  "id": "scenario_vertical_slice_30d",
+  "display_name": "30日版垂直スライス",
+  "total_days": 30,
+  "district_path": "districts/asahi_station_east.json",
+  "player_store_path": "stores/player_store.json",
+  "competitor_store_paths": ["stores/competitor_store.json"],
+  "cohorts_path": "cohorts/customer_cohorts.json",
+  "categories_path": "products/categories.json",
+  "time_blocks_path": "operations/time_blocks.json",
+  "economy_path": "balance/economy.json"
+}

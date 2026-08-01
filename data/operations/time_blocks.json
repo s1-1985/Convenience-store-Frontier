@@ -1,0 +1,6 @@
+[
+  { "id": "morning", "start_hour": 6, "end_hour": 10 },
+  { "id": "midday", "start_hour": 10, "end_hour": 14 },
+  { "id": "afternoon", "start_hour": 14, "end_hour": 18 },
+  { "id": "evening", "start_hour": 18, "end_hour": 24 }
+]
