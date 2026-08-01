@@ -50,9 +50,10 @@ describe("free-play simulation", () => {
   it("保存データを安全に解析し、不正JSONを拒否する", () => {
     const simulation = createFreePlaySimulation(loadScenario(SCENARIO_PATH), 9090);
     simulation.advanceDay();
-    const serialized = JSON.stringify(simulation.exportSave());
+    const save = simulation.exportSave();
+    const serialized = JSON.stringify(save);
 
-    expect(parseFreePlaySave(serialized)).toEqual(simulation.exportSave());
+    expect(parseFreePlaySave(serialized)).toEqual(save);
     expect(parseFreePlaySave("not-json")).toBeNull();
     expect(parseFreePlaySave('{"schemaVersion":99}')).toBeNull();
   });

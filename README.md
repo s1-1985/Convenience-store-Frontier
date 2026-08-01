@@ -10,7 +10,7 @@
 
 ## 現在の開発段階
 
-最初に制作するのは、ゲーム内30日・実プレイ45〜70分の垂直スライスです。
+現在は、シナリオより先に長期運営できるフリープレイの箱庭を構築しています。30日版は数値回帰テストとして残します。
 
 検証する主要判断は次の6つです。
 
@@ -58,6 +58,8 @@ npm run preview
 - [ゲームデザイン](docs/game-design.md)
 - [30日版垂直スライス仕様](docs/vertical-slice.md)
 - [実装バックログ](docs/backlog.md)
+- [フリープレイ先行ロードマップ](docs/free-play-roadmap.md)
+- [AndroidデモAPK](docs/android-demo.md)
 - [データ配置方針](data/README.md)
 - [ソース構成方針](src/README.md)
 

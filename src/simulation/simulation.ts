@@ -117,6 +117,10 @@ export interface Simulation {
   isFinished(): boolean;
 }
 
+export interface SimulationOptions {
+  maxDays?: number | null;
+}
+
 function addAmount(record: Record<string, number>, key: string, amount: number): void {
   record[key] = (record[key] ?? 0) + amount;
 }
@@ -153,7 +157,12 @@ function emptyAccumulator(weather: Weather): DayAccumulator {
   };
 }
 
-export function createSimulation(scenario: ScenarioBundle, seed: number): Simulation {
+export function createSimulation(
+  scenario: ScenarioBundle,
+  seed: number,
+  options: SimulationOptions = {},
+): Simulation {
+  const maxDays = options.maxDays === undefined ? scenario.scenario.totalDays : options.maxDays;
   const randomStreams = new RandomStreams(seed);
   let clock: SimClock = createInitialClock();
   let finished = false;
@@ -224,7 +233,7 @@ export function createSimulation(scenario: ScenarioBundle, seed: number): Simula
   }
 
   function planNextDayOrders(): void {
-    if (clock.day + 1 > scenario.scenario.totalDays) {
+    if (maxDays !== null && clock.day + 1 > maxDays) {
       return;
     }
     const forecast = forecastDailyProductDemand(
@@ -496,7 +505,7 @@ export function createSimulation(scenario: ScenarioBundle, seed: number): Simula
     clock = nextClock(clock);
 
     if (dayJustEnded) {
-      if (clock.day > scenario.scenario.totalDays) {
+      if (maxDays !== null && clock.day > maxDays) {
         finished = true;
       } else {
         weather = rollWeather(scenario.district, randomStreams.stream("weather"));
@@ -601,6 +610,9 @@ export function createSimulation(scenario: ScenarioBundle, seed: number): Simula
     },
 
     runToEnd(): void {
+      if (maxDays === null) {
+        throw new Error("Endless simulation has no end date");
+      }
       while (!finished) {
         processSlot();
       }
