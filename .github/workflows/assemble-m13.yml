@@ -27,9 +27,9 @@ jobs:
           printf '%s  %s\n' 'f10a171787fc5ad4fa070e4db34bcdc6acb933e086555cb87f60ba5dd8ddd292' '.m13/source.03a' | sha256sum -c -
           printf '%s  %s\n' '64776e8343d7d2003aaa23f851c617eca0b19db496c94cb957aa9470ce6a7d2a' '.m13/source.03b' | sha256sum -c -
           cat .m13/source.00 .m13/source.01 .m13/source.02 .m13/source.03a .m13/source.03b > /tmp/m13-source.zip.b64
-          printf '%s  %s\n' '310bc32ed72ee20f106be7db1a53f6d1bc7c2200c951768e3b5879deea79fb88' '/tmp/m13-source.zip.b64' | sha256sum -c -
+          printf '%s  %s\n' 'fb7a58b65f12c369ff184ea00dcfc072e33f6add21cdfb66dcf72179a4e122a8' '/tmp/m13-source.zip.b64' | sha256sum -c -
           base64 -d /tmp/m13-source.zip.b64 > /tmp/m13-source.zip
-          printf '%s  %s\n' '6d3a143028c4cf359ee347ae55c8ae85e3a177e603f2f0a5ef15609b1e34b89b' '/tmp/m13-source.zip' | sha256sum -c -
+          printf '%s  %s\n' 'c5cc2c50195f8df3a862ddfbe0f038609ba818925b5c2d98cadc180c139383f6' '/tmp/m13-source.zip' | sha256sum -c -
           unzip -o /tmp/m13-source.zip -d .
           printf '%s  %s\n' '6e8cb4f769f30450c097e2d033e07c2f17bc2f496a1eaf05480d5350a05c9d58' 'src/game/storeOperationsEngine.ts' | sha256sum -c -
           printf '%s  %s\n' '04c14beb999a249c6c2ce72ab5b65a185e00061c49836ca1a55c9e0f1b35429b' 'src/ui/storeGameRuntime.ts' | sha256sum -c -
