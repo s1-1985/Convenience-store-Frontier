@@ -1,0 +1,177 @@
+.playtest-panel {
+  border-top: 4px solid var(--blue);
+}
+
+.playtest-heading,
+.playtest-section-title,
+.playtest-actions,
+.playtest-history-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.playtest-heading h2,
+.playtest-section-title h3 {
+  margin: 0;
+}
+
+.playtest-privacy {
+  border: 1px solid var(--blue);
+  border-radius: 999px;
+  padding: 0.28rem 0.55rem;
+  color: var(--blue);
+  background: var(--blue-soft);
+  font-size: 0.75rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.playtest-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.55rem;
+  margin-top: 0.9rem;
+}
+
+.playtest-metrics > div {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.62rem;
+  background: var(--paper-strong);
+}
+
+.playtest-metrics span,
+.playtest-metrics strong {
+  display: block;
+}
+
+.playtest-metrics span {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.playtest-metrics strong {
+  margin-top: 0.22rem;
+  font-size: 0.98rem;
+}
+
+.playtest-detection-section {
+  margin-top: 1rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--line);
+}
+
+.playtest-section-title small {
+  color: var(--muted);
+  text-align: right;
+}
+
+.playtest-detection-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.45rem;
+  margin-top: 0.65rem;
+}
+
+.playtest-detection-button {
+  padding: 0.58rem 0.38rem;
+  font-size: 0.78rem;
+}
+
+.playtest-detection-button.detected {
+  border-color: var(--green-600);
+  background: #e3ebda;
+  color: var(--green-900);
+  opacity: 1;
+}
+
+.playtest-checks {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.45rem;
+  margin-top: 0.85rem;
+}
+
+.playtest-checks > div {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  border-radius: 7px;
+  padding: 0.52rem;
+  background: #ececdf;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.playtest-checks.pass > div {
+  background: #dfead7;
+}
+
+.playtest-checks.fail > div {
+  background: var(--red-soft);
+}
+
+.playtest-checks span {
+  font-weight: 900;
+}
+
+.playtest-history-summary {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  margin-top: 0.8rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.playtest-history-summary span {
+  padding-right: 0.65rem;
+  border-right: 1px solid var(--line);
+}
+
+.playtest-history-summary span:last-child {
+  border-right: 0;
+}
+
+.playtest-actions {
+  justify-content: flex-start;
+  margin-top: 0.85rem;
+}
+
+.playtest-note {
+  margin: 0.75rem 0 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.55;
+}
+
+@media (max-width: 900px) {
+  .playtest-metrics,
+  .playtest-checks {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .playtest-detection-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .playtest-heading,
+  .playtest-section-title {
+    align-items: flex-start;
+  }
+
+  .playtest-metrics,
+  .playtest-checks,
+  .playtest-detection-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .playtest-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
