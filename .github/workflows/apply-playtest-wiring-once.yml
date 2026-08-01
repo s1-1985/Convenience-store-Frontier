@@ -1,0 +1,192 @@
+name: Apply playtest wiring once
+
+on:
+  push:
+    branches:
+      - agent/milestone-10-playtest-telemetry
+    paths:
+      - .github/workflows/apply-playtest-wiring-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/milestone-10-playtest-telemetry
+      - name: Wire playtest runtime and documentation
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace(path_string, old, new, count=-1):
+              path = Path(path_string)
+              text = path.read_text()
+              if old not in text:
+                  raise SystemExit(f'pattern not found in {path_string}: {old[:80]!r}')
+              path.write_text(text.replace(old, new, count))
+
+          replace(
+              'src/tests/playtestSession.test.ts',
+              '    for (const [index, issueId] of ["queue", "empty_shelf", "closed_demand"] as const.entries()) {\n',
+              '    const issueIds = ["queue", "empty_shelf", "closed_demand"] as const;\n    for (const [index, issueId] of issueIds.entries()) {\n',
+          )
+
+          session_path = Path('src/playtest/session.ts')
+          session_text = session_path.read_text()
+          session_text = session_text.replace(
+              '  if (session.finished || session.runningSinceEpochMs === null) return updated(session, nowEpochMs);',
+              '  if (session.finished || session.runningSinceEpochMs === null) return session;',
+              2,
+          )
+          session_text = session_text.replace(
+              '  if (session.finished || session.runningSinceEpochMs !== null) return updated(session, nowEpochMs);',
+              '  if (session.finished || session.runningSinceEpochMs !== null) return session;',
+              1,
+          )
+          session_path.write_text(session_text)
+
+          runtime_path = Path('src/ui/playtestRuntime.ts')
+          runtime = runtime_path.read_text()
+          runtime = runtime.replace(
+              '''function loadHistory(): PlaytestSession[] {
+            const stored = readStorage<unknown[]>(HISTORY_STORAGE_KEY, []);
+            return stored.filter(isPlaytestSession).slice(0, MAX_HISTORY);
+          }''',
+              '''function loadHistory(): PlaytestSession[] {
+            const stored = readStorage<unknown>(HISTORY_STORAGE_KEY, []);
+            return Array.isArray(stored)
+              ? stored.filter(isPlaytestSession).slice(0, MAX_HISTORY)
+              : [];
+          }''',
+          )
+          runtime = runtime.replace(
+              '''function allSessions(): PlaytestSession[] {
+            if (!session) return history;
+            return [session, ...history.filter((entry) => entry.sessionId !== session?.sessionId)];
+          }''',
+              '''function exportedSessions(): PlaytestSession[] {
+            if (!session) return history;
+            return [session, ...history.filter((entry) => entry.sessionId !== session?.sessionId)];
+          }
+
+          function aggregateSessions(): PlaytestSession[] {
+            const completedHistory = history.filter((entry) => entry.finished);
+            if (!session?.finished) return completedHistory;
+            return [
+              session,
+              ...completedHistory.filter((entry) => entry.sessionId !== session?.sessionId),
+            ];
+          }''',
+          )
+          runtime = runtime.replace(
+              '  const aggregate = summarizePlaytestSessions(allSessions());',
+              '  const aggregate = summarizePlaytestSessions(aggregateSessions());',
+          )
+          runtime = runtime.replace(
+              '''  const sessions = allSessions();
+            const payload = {
+              schemaVersion: 1,
+              exportedAt: new Date().toISOString(),
+              currentSession: session,
+              sessions,
+              aggregate: summarizePlaytestSessions(sessions),
+            };''',
+              '''  const sessions = exportedSessions();
+            const payload = {
+              schemaVersion: 1,
+              exportedAt: new Date().toISOString(),
+              currentSession: session,
+              sessions,
+              aggregate: summarizePlaytestSessions(aggregateSessions()),
+            };''',
+          )
+          runtime = runtime.replace(
+              '''  if (button.matches("#campaign-panel [data-campaign-action='ack']")) {
+            recordCampaignFromDom(true);
+            persist();
+          }''',
+              '''  if (button.matches("#campaign-panel [data-campaign-action='ack']") && session) {
+            const eventCard = button.closest<HTMLElement>(".campaign-event");
+            const title = eventCard?.querySelector("h3")?.textContent?.trim();
+            if (eventCard && title) {
+              const id = button.dataset.eventId || `campaign-${title}`;
+              const dayText = eventCard.querySelector<HTMLElement>(".campaign-event-meta span")?.textContent ?? "";
+              session = recordPlaytestCampaignCheckpoint(
+                session,
+                {
+                  id,
+                  title,
+                  day: Math.max(0, Math.round(parseNumber(dayText))),
+                  acknowledged: true,
+                },
+                Date.now(),
+              );
+              persist();
+            }
+          }''',
+          )
+          runtime_path.write_text(runtime)
+
+          replace(
+              'index.html',
+              '    <script type="module" src="/src/ui/campaignRuntime.ts"></script>\n',
+              '    <script type="module" src="/src/ui/campaignRuntime.ts"></script>\n    <script type="module" src="/src/ui/playtestRuntime.ts"></script>\n',
+          )
+
+          index_path = Path('src/index.ts')
+          index_text = index_path.read_text()
+          if 'from "./playtest/session.js"' not in index_text:
+              index_text += '''\nexport {\n  PLAYTEST_CONTROL_IDS,\n  PLAYTEST_ISSUE_IDS,\n  PLAYTEST_POLICY_DIMENSIONS,\n  assessPlaytestSession,\n  changedPolicyDimensions,\n  createPlaytestSession,\n  finishPlaytestSession,\n  markPlaytestReportInteraction,\n  pausePlaytestSession,\n  recordPlaytestAutoStop,\n  recordPlaytestCampaignCheckpoint,\n  recordPlaytestControl,\n  recordPlaytestFinalEvaluation,\n  recordPlaytestPolicyDecision,\n  recordPlaytestVisualDetection,\n  refreshPlaytestElapsed,\n  resumePlaytestSession,\n  summarizePlaytestSessions,\n  updatePlaytestProgress,\n} from "./playtest/session.js";\nexport type {\n  CreatePlaytestSessionInput,\n  PlaytestAggregateSummary,\n  PlaytestAutoStop,\n  PlaytestCampaignCheckpoint,\n  PlaytestControlId,\n  PlaytestFinalEvaluation,\n  PlaytestFinishReason,\n  PlaytestIssueId,\n  PlaytestMoment,\n  PlaytestPolicyDecision,\n  PlaytestPolicyDimension,\n  PlaytestPolicySnapshot,\n  PlaytestSession,\n  PlaytestSessionAssessment,\n  PlaytestVisualDetection,\n} from "./playtest/session.js";\n'''
+          index_path.write_text(index_text)
+
+          replace(
+              'README.md',
+              '- [実装バックログ](docs/backlog.md)\n',
+              '- [実装バックログ](docs/backlog.md)\n- [ローカル・プレイテスト計測](docs/playtest-guide.md)\n',
+          )
+          replace(
+              'README.md',
+              'Playable numeric simulation / basic browser UI\n',
+              'Playable 30-day vertical slice / browser UI / local playtest telemetry\n',
+          )
+
+          backlog = Path('docs/backlog.md')
+          backlog_text = backlog.read_text()
+          marker = '## 試作中の禁止事項\n'
+          milestone = '''## Milestone 10：ローカル・プレイテスト計測
+
+### P1
+
+- プレイ時間と30日完走記録
+- 実変更だけを数える重要判断ログ
+- 店内表示からの問題発見記録
+- 数値レポート操作前の発見判定
+- 自動停止、イベント確認、最終評価ログ
+- ローカル保存とJSON出力
+- 複数セッション集計
+
+### 完了条件
+
+- 45〜70分、重要判断6回以上をセッション単位で判定できる
+- テスター60％以上が数値前に問題を察知したかを集計できる
+- リセットや再読み込みでセッションが混線しない
+- 計測データを外部送信しない
+
+'''
+          if milestone not in backlog_text:
+              if marker not in backlog_text:
+                  raise SystemExit('backlog marker not found')
+              backlog_text = backlog_text.replace(marker, milestone + marker)
+          backlog.write_text(backlog_text)
+          PY
+      - name: Commit wiring
+        run: |
+          git config user.name "playtest-wiring-bot"
+          git config user.email "playtest-wiring-bot@users.noreply.github.com"
+          git add index.html README.md docs/backlog.md src/index.ts src/playtest/session.ts src/tests/playtestSession.test.ts src/ui/playtestRuntime.ts
+          git commit -m "feat: wire local playtest telemetry into browser UI"
+          git push origin HEAD:agent/milestone-10-playtest-telemetry
