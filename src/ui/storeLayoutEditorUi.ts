@@ -261,8 +261,9 @@ export function createStoreLayoutEditorUi(options: StoreLayoutEditorUiOptions): 
   overlay.hidden = true;
   overlay.setAttribute("aria-label", "売場レイアウト編集グリッド");
   stage.append(overlay);
-  const overlayContext = overlay.getContext("2d");
-  if (!overlayContext) throw new Error("Store layout editor canvas is unavailable");
+  const contextCandidate = overlay.getContext("2d");
+  if (!contextCandidate) throw new Error("Store layout editor canvas is unavailable");
+  const overlayContext: CanvasRenderingContext2D = contextCandidate;
   overlayContext.imageSmoothingEnabled = false;
 
   const panel = createPanel();
