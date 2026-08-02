@@ -30,8 +30,8 @@ jobs:
             .m16direct/chunk.05 \
             .m16direct/chunk.06 \
             .m16direct/chunk.07 \
+            | tr -d '\r\n\t ' \
             > /tmp/m16-assets.zip.b64
-          printf '%s  %s\n' '134b33551f9b1505735e8b2ffa9047fb6aad4d6a4a585135efc16bfdbbac25ac' '/tmp/m16-assets.zip.b64' | sha256sum -c -
           base64 -d /tmp/m16-assets.zip.b64 > /tmp/m16-assets.zip
           printf '%s  %s\n' 'e89d5133b52a9829935711b85fccfaa9ec82fcc4865b4d8942d1e581f2c24fe8' '/tmp/m16-assets.zip' | sha256sum -c -
           unzip -t /tmp/m16-assets.zip
