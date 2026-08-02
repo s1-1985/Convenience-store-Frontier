@@ -1,0 +1,55 @@
+name: Assemble Milestone 16 Final Assets
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/assemble-m16-final.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/milestone-16-real-raster-store
+          fetch-depth: 0
+
+      - name: Verify staged asset chunks
+        run: |
+          set -euxo pipefail
+          test "$(find .m16direct -maxdepth 1 -type f -name 'chunk.*' | wc -l)" -eq 8
+          for number in 00 01 02 03 04 05 06 07; do
+            test -s ".m16direct/chunk.${number}"
+          done
+
+      - name: Decode and verify raster bundle
+        run: |
+          set -euxo pipefail
+          cat .m16direct/chunk.00 .m16direct/chunk.01 .m16direct/chunk.02 .m16direct/chunk.03 \
+              .m16direct/chunk.04 .m16direct/chunk.05 .m16direct/chunk.06 .m16direct/chunk.07 \
+            | tr -d '\r\n\t ' > /tmp/m16-assets.zip.b64
+          base64 -d /tmp/m16-assets.zip.b64 > /tmp/m16-assets.zip
+          printf '%s  %s\n' 'e89d5133b52a9829935711b85fccfaa9ec82fcc4865b4d8942d1e581f2c24fe8' '/tmp/m16-assets.zip' | sha256sum -c -
+          unzip -t /tmp/m16-assets.zip
+          rm -rf public/assets/store
+          mkdir -p public/assets/store
+          unzip -o /tmp/m16-assets.zip -d public/assets/store
+          printf '%s  %s\n' 'bc54446540d1e4e289feb12923625a67814c82e617766a6900c4c7bbb4d24357' 'public/assets/store/customers.webp' | sha256sum -c -
+          printf '%s  %s\n' 'b36d35866ac3f747c2cb3c5920795c92240f836bbe674290c310bfc2ebb97bb1' 'public/assets/store/fixtures.webp' | sha256sum -c -
+          printf '%s  %s\n' 'b140d4258d363102e05a0aecb3603739eb33ebfee1afa311c3787cb0aaca88d7' 'public/assets/store/icons.webp' | sha256sum -c -
+          printf '%s  %s\n' 'cad774855f6fef7cc1ee7242f859c94740a5ea9e6a339340e885161cec91b388' 'public/assets/store/staff.webp' | sha256sum -c -
+
+      - name: Commit assets to branch
+        run: |
+          set -euxo pipefail
+          rm -rf .m16direct .m16 .m16asset .m16r
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/assets/store .m16direct .m16 .m16asset .m16r
+          git commit -m "feat: add verified real raster store atlases"
+          git push origin HEAD:agent/milestone-16-real-raster-store
