@@ -18,6 +18,7 @@ import {
 import {
   createStoreLayoutEditorUi,
   loadSavedStoreLayout,
+  type StoreLayoutEditorUi,
 } from "./storeLayoutEditorUi.js";
 import { configureHiDpiCanvas } from "./storeCanvasResolution.js";
 import {
@@ -31,12 +32,31 @@ import "./storeGame.css";
 
 const LOGICAL_WIDTH = 1080;
 const LOGICAL_HEIGHT = 500;
-const GRID_X = 12;
-const GRID_Y = 38;
-const TILE_WIDTH = 28;
-const TILE_HEIGHT = 23;
 const STORE_SAVE_KEY = "convenience-store-frontier.store-operations.v1";
 let storeArtAssets: StoreArtAssets | undefined;
+
+interface StoreViewGeometry {
+  gridX: number;
+  gridY: number;
+  tileWidth: number;
+  tileHeight: number;
+  footerY: number;
+}
+
+const PLAY_GEOMETRY: StoreViewGeometry = {
+  gridX: 12,
+  gridY: 43,
+  tileWidth: 33,
+  tileHeight: 23,
+  footerY: 414,
+};
+const EDITOR_GEOMETRY: StoreViewGeometry = {
+  gridX: 12,
+  gridY: 38,
+  tileWidth: 28,
+  tileHeight: 23,
+  footerY: 412,
+};
 
 const CATEGORY_LABELS: Record<StoreCategoryId, string> = {
   drinks: "飲料",
@@ -46,16 +66,6 @@ const CATEGORY_LABELS: Record<StoreCategoryId, string> = {
   instant: "カップ麺",
   daily_goods: "日用品",
   magazines: "雑誌・書籍",
-};
-
-const CATEGORY_COLORS: Record<StoreCategoryId, readonly string[]> = {
-  drinks: ["#5aa8d0", "#e05e4a", "#e5c247", "#6ba65c"],
-  dessert: ["#f09ca6", "#f4d26a", "#8fc5d6", "#d99bd3"],
-  ready_meal: ["#d96b45", "#efb44a", "#8cb65f", "#b94b3f"],
-  snacks: ["#e15241", "#e7bb3f", "#4f91c1", "#6baa58"],
-  instant: ["#e2663f", "#f1c34b", "#4e8bb2", "#8aa94f"],
-  daily_goods: ["#4f91c1", "#f3f0dc", "#6fb493", "#d97b8f"],
-  magazines: ["#d94c4c", "#5d82bb", "#e0bb43", "#7cad5d"],
 };
 
 const TASK_LABELS: Record<StoreStaffTask, string> = {
@@ -68,9 +78,9 @@ function optional<T extends HTMLElement>(id: string): T | null {
   return document.getElementById(id) as T | null;
 }
 
-function numberFrom(text: string | null | undefined): number {
-  if (!text) return 0;
-  const match = text.replaceAll(",", "").replaceAll("−", "-").match(/-?\d+(?:\.\d+)?/);
+function numberFrom(textValue: string | null | undefined): number {
+  if (!textValue) return 0;
+  const match = textValue.replaceAll(",", "").replaceAll("−", "-").match(/-?\d+(?:\.\d+)?/);
   return match ? Number.parseFloat(match[0]) : 0;
 }
 
@@ -79,13 +89,13 @@ function currentDay(): number {
 }
 
 function currentHour(): number {
-  const text = optional("time-label")?.textContent ?? "06:00";
-  return Number.parseInt(text.split(":")[0] ?? "6", 10);
+  const value = optional("time-label")?.textContent ?? "06:00";
+  return Number.parseInt(value.split(":")[0] ?? "6", 10);
 }
 
 function currentMinute(): number {
-  const text = optional("time-label")?.textContent ?? "06:00";
-  return Number.parseInt(text.split(":")[1] ?? "0", 10);
+  const value = optional("time-label")?.textContent ?? "06:00";
+  return Number.parseInt(value.split(":")[1] ?? "0", 10);
 }
 
 function currentStaffing(): number {
@@ -130,17 +140,17 @@ function engineContext(): StoreEngineContext {
   };
 }
 
-function tilePixel(tile: TilePoint): { x: number; y: number } {
+function tilePixel(tile: TilePoint, geometry: StoreViewGeometry): { x: number; y: number } {
   return {
-    x: GRID_X + tile.x * TILE_WIDTH,
-    y: GRID_Y + tile.y * TILE_HEIGHT,
+    x: geometry.gridX + tile.x * geometry.tileWidth,
+    y: geometry.gridY + tile.y * geometry.tileHeight,
   };
 }
 
-function agentPixel(agent: { x: number; y: number }): { x: number; y: number } {
+function agentPixel(agent: { x: number; y: number }, geometry: StoreViewGeometry): { x: number; y: number } {
   return {
-    x: GRID_X + (agent.x + 0.5) * TILE_WIDTH,
-    y: GRID_Y + (agent.y + 0.65) * TILE_HEIGHT,
+    x: geometry.gridX + (agent.x + 0.5) * geometry.tileWidth,
+    y: geometry.gridY + (agent.y + 0.7) * geometry.tileHeight,
   };
 }
 
@@ -150,7 +160,7 @@ function rect(
   y: number,
   width: number,
   height: number,
-  fill: string,
+  fill: string | CanvasGradient | CanvasPattern,
   stroke = "#263240",
   lineWidth = 1,
 ): void {
@@ -177,305 +187,321 @@ function text(
   context.textAlign = align;
   context.textBaseline = "middle";
   context.fillStyle = color;
-  context.shadowColor = "rgba(7,18,31,.85)";
+  context.shadowColor = "rgba(7,18,31,.9)";
   context.shadowOffsetX = 1;
   context.shadowOffsetY = 1;
   context.fillText(value, Math.round(x), Math.round(y));
   context.restore();
 }
 
-function fixtureBounds(fixture: StoreFixture): { x: number; y: number; width: number; height: number } {
+function fixtureBounds(
+  fixture: StoreFixture,
+  geometry: StoreViewGeometry,
+): { x: number; y: number; width: number; height: number } {
   const xs = fixture.tiles.map((tile) => tile.x);
   const ys = fixture.tiles.map((tile) => tile.y);
   const minimumX = Math.min(...xs);
   const maximumX = Math.max(...xs);
   const minimumY = Math.min(...ys);
   const maximumY = Math.max(...ys);
-  const topLeft = tilePixel({ x: minimumX, y: minimumY });
+  const topLeft = tilePixel({ x: minimumX, y: minimumY }, geometry);
   return {
     x: topLeft.x,
     y: topLeft.y,
-    width: (maximumX - minimumX + 1) * TILE_WIDTH,
-    height: (maximumY - minimumY + 1) * TILE_HEIGHT,
+    width: (maximumX - minimumX + 1) * geometry.tileWidth,
+    height: (maximumY - minimumY + 1) * geometry.tileHeight,
   };
 }
 
-function drawFloor(context: CanvasRenderingContext2D, layout: StoreLayout): void {
-  const width = layout.width * TILE_WIDTH;
-  const height = layout.height * TILE_HEIGHT;
-  rect(context, GRID_X, GRID_Y, width, height, "#d9c8aa", "#e2ac3e", 3);
+function drawFloor(context: CanvasRenderingContext2D, layout: StoreLayout, geometry: StoreViewGeometry): void {
+  const width = layout.width * geometry.tileWidth;
+  const height = layout.height * geometry.tileHeight;
+  rect(context, geometry.gridX - 3, geometry.gridY - 3, width + 6, height + 6, "#b99f74", "#e4ad3e", 3);
+  const floorGradient = context.createLinearGradient(0, geometry.gridY, 0, geometry.gridY + height);
+  floorGradient.addColorStop(0, "#efe3c9");
+  floorGradient.addColorStop(1, "#d7c39f");
+  context.fillStyle = floorGradient;
+  context.fillRect(geometry.gridX, geometry.gridY, width, height);
+
   for (let y = 0; y < layout.height; y += 1) {
     for (let x = 0; x < layout.width; x += 1) {
-      const pixel = tilePixel({ x, y });
+      const pixel = tilePixel({ x, y }, geometry);
       const edge = x === 0 || y === 0 || x === layout.width - 1 || y === layout.height - 1;
-      rect(
-        context,
-        pixel.x,
-        pixel.y,
-        TILE_WIDTH,
-        TILE_HEIGHT,
-        edge ? "#7c756b" : (x + y) % 2 === 0 ? "#dfcfb2" : "#d8c5a5",
-        edge ? "#3e4346" : "rgba(105,84,59,.18)",
-        1,
-      );
+      if (edge) {
+        const edgeGradient = context.createLinearGradient(pixel.x, pixel.y, pixel.x, pixel.y + geometry.tileHeight);
+        edgeGradient.addColorStop(0, "#81796e");
+        edgeGradient.addColorStop(1, "#69645d");
+        context.fillStyle = edgeGradient;
+        context.fillRect(pixel.x, pixel.y, geometry.tileWidth, geometry.tileHeight);
+        context.strokeStyle = "rgba(31,38,42,.52)";
+      } else {
+        context.fillStyle = (x + y) % 2 === 0 ? "rgba(255,250,230,.11)" : "rgba(117,85,48,.035)";
+        context.fillRect(pixel.x, pixel.y, geometry.tileWidth, geometry.tileHeight);
+        context.strokeStyle = "rgba(112,86,55,.14)";
+      }
+      context.lineWidth = 1;
+      context.strokeRect(pixel.x, pixel.y, geometry.tileWidth, geometry.tileHeight);
     }
   }
+
+  const wallY = geometry.gridY;
+  const wallGradient = context.createLinearGradient(0, wallY, 0, wallY + 21);
+  wallGradient.addColorStop(0, "rgba(255,255,255,.48)");
+  wallGradient.addColorStop(1, "rgba(173,151,119,.18)");
+  context.fillStyle = wallGradient;
+  context.fillRect(geometry.gridX + geometry.tileWidth, wallY + 1, width - geometry.tileWidth * 2, 19);
 }
 
-function drawProducts(
+function fixtureLabel(fixture: StoreFixture): string | undefined {
+  if (fixture.categoryId) return CATEGORY_LABELS[fixture.categoryId];
+  if (fixture.kind === "entrance") return "入口";
+  if (fixture.kind === "backroom") return "バックヤード";
+  if (fixture.kind === "register") return "レジ";
+  return undefined;
+}
+
+function drawFallbackFixture(
+  context: CanvasRenderingContext2D,
+  fixture: StoreFixture,
+  bounds: ReturnType<typeof fixtureBounds>,
+): void {
+  const fill = fixture.kind === "register"
+    ? "#d8d7ca"
+    : fixture.kind === "entrance"
+      ? "#92c2cc"
+      : fixture.kind === "backroom"
+        ? "#92785a"
+        : fixture.kind === "waste"
+          ? "#4f8954"
+          : fixture.kind === "cold_case"
+            ? "#d8e6e8"
+            : "#78634d";
+  rect(context, bounds.x, bounds.y, bounds.width, bounds.height, fill, "#344650", 2);
+}
+
+function drawFixture(
   context: CanvasRenderingContext2D,
   fixture: StoreFixture,
   snapshot: StoreOperationsSnapshot,
-  bounds: ReturnType<typeof fixtureBounds>,
+  geometry: StoreViewGeometry,
 ): void {
-  const categoryId = fixture.categoryId;
-  if (!categoryId) return;
-  const inventory = snapshot.inventories[categoryId];
-  const ratio = inventory.shelfCapacity > 0 ? inventory.shelfUnits / inventory.shelfCapacity : 0;
-  const colors = CATEGORY_COLORS[categoryId];
-  const columns = Math.max(3, Math.floor((bounds.width - 12) / 14));
-  const rows = Math.max(2, Math.floor((bounds.height - 28) / 12));
-  const visible = Math.round(columns * rows * ratio);
-  for (let index = 0; index < columns * rows; index += 1) {
-    const column = index % columns;
-    const row = Math.floor(index / columns);
-    rect(
-      context,
-      bounds.x + 7 + column * ((bounds.width - 14) / columns),
-      bounds.y + 23 + row * ((bounds.height - 27) / rows),
-      9,
-      8,
-      index < visible ? colors[index % colors.length] ?? "#ddd" : "#77766e",
-      "#433b35",
-      1,
-    );
-  }
-  if (ratio <= 0.35) {
-    const warning = ratio <= 0.02 ? "品切" : "残少";
-    rect(context, bounds.x + bounds.width - 42, bounds.y + 2, 40, 18, ratio <= 0.02 ? "#ac3030" : "#d18b25", "#fff0ad", 1);
-    text(context, warning, bounds.x + bounds.width - 22, bounds.y + 11, 9, "center");
-  }
-}
-
-function drawFixture(context: CanvasRenderingContext2D, fixture: StoreFixture, snapshot: StoreOperationsSnapshot): void {
-  const bounds = fixtureBounds(fixture);
+  const bounds = fixtureBounds(fixture, geometry);
   const artwork = storeArtAssets
     ? drawFixtureArtwork(context, storeArtAssets, fixture, snapshot, bounds)
     : undefined;
-  if (artwork) {
-    const label = fixture.categoryId
-      ? CATEGORY_LABELS[fixture.categoryId]
-      : fixture.kind === "entrance"
-        ? "入口"
-        : fixture.kind === "backroom"
-          ? "バックヤード"
-          : fixture.kind === "register"
-            ? "レジ"
-            : undefined;
-    if (label) {
-      text(context, label, artwork.labelX, artwork.labelY, label.length >= 7 ? 8 : 10, "center");
-    }
-    if (fixture.categoryId) {
-      const inventory = snapshot.inventories[fixture.categoryId];
-      const ratio = inventory.shelfCapacity > 0 ? inventory.shelfUnits / inventory.shelfCapacity : 0;
-      if (ratio <= 0.35) {
-        const warning = ratio <= 0.02 ? "品切れ" : "残り少";
-        rect(
-          context,
-          bounds.x + bounds.width - 48,
-          bounds.y + bounds.height - 19,
-          46,
-          17,
-          ratio <= 0.02 ? "#ac3030" : "#d18b25",
-          "#fff0ad",
-          1,
-        );
-        text(context, warning, bounds.x + bounds.width - 25, bounds.y + bounds.height - 10, 8, "center");
-      }
-    }
-    return;
-  }
-  if (fixture.kind === "entrance") {
-    rect(context, bounds.x, bounds.y - 5, bounds.width, bounds.height + 5, "#92c2cc", "#2c4e58", 2);
-    rect(context, bounds.x + bounds.width / 2 - 2, bounds.y - 4, 4, bounds.height + 3, "#e9f7f3", "#e9f7f3", 0);
-    text(context, "入口", bounds.x + bounds.width / 2, bounds.y - 11, 10, "center");
-    return;
-  }
-  if (fixture.kind === "backroom") {
-    rect(context, bounds.x, bounds.y, bounds.width, bounds.height, "#92785a", "#392e27", 2);
-    text(context, "バックヤード", bounds.x + bounds.width / 2, bounds.y + 12, 10, "center");
-    for (let index = 0; index < 8; index += 1) {
-      rect(context, bounds.x + 8 + (index % 3) * 30, bounds.y + 22 + Math.floor(index / 3) * 15, 24, 11, "#b88a50", "#62472e", 1);
-    }
-    return;
-  }
-  if (fixture.kind === "register") {
-    rect(context, bounds.x, bounds.y, bounds.width, bounds.height, "#d8d7ca", "#344650", 2);
-    rect(context, bounds.x + 10, bounds.y + 12, 48, 30, "#456776", "#172832", 2);
-    rect(context, bounds.x + 69, bounds.y + 12, 52, 19, "#8ca4a9", "#243840", 1);
-    text(context, "レジ", bounds.x + bounds.width / 2, bounds.y + bounds.height - 12, 11, "center");
-    return;
-  }
-  if (fixture.kind === "waste") {
-    const colors = ["#8b8175", "#3f7797", "#4f8954"];
-    fixture.tiles.forEach((tile, index) => {
-      const pixel = tilePixel(tile);
-      rect(context, pixel.x + 3, pixel.y + 2, TILE_WIDTH - 6, TILE_HEIGHT - 4, colors[index % colors.length] ?? "#777", "#30383c", 1);
-    });
-    return;
+  if (!artwork) drawFallbackFixture(context, fixture, bounds);
+
+  const label = fixtureLabel(fixture);
+  if (label) {
+    const x = artwork?.labelX ?? bounds.x + bounds.width / 2;
+    const y = artwork?.labelY ?? bounds.y + 11;
+    text(context, label, x, y, label.length >= 7 ? 8 : 10, "center");
   }
 
-  const cold = fixture.kind === "cold_case";
-  rect(context, bounds.x, bounds.y, bounds.width, bounds.height, cold ? "#d8e6e8" : "#78634d", cold ? "#2b4956" : "#302820", 2);
-  const categoryId = fixture.categoryId;
-  if (categoryId) {
-    rect(context, bounds.x + 2, bounds.y + 2, bounds.width - 4, 18, cold ? "#2f679d" : "#315f95", "#17304a", 1);
-    text(context, CATEGORY_LABELS[categoryId], bounds.x + bounds.width / 2, bounds.y + 11, 10, "center");
-    drawProducts(context, fixture, snapshot, bounds);
+  if (fixture.categoryId) {
+    const inventory = snapshot.inventories[fixture.categoryId];
+    const ratio = inventory.shelfCapacity > 0 ? inventory.shelfUnits / inventory.shelfCapacity : 0;
+    if (ratio <= 0.35) {
+      const warning = ratio <= 0.02 ? "品切れ" : "残り少";
+      const warningX = artwork?.warningX ?? bounds.x + bounds.width - 3;
+      const warningY = artwork?.warningY ?? bounds.y + bounds.height - 3;
+      const warningWidth = 48;
+      rect(
+        context,
+        warningX - warningWidth,
+        warningY - 18,
+        warningWidth,
+        18,
+        ratio <= 0.02 ? "#ad2e2e" : "#d28722",
+        "#fff1aa",
+        1,
+      );
+      text(context, warning, warningX - warningWidth / 2, warningY - 9, 9, "center");
+    }
   }
+}
+
+function drawBubble(context: CanvasRenderingContext2D, value: string, x: number, y: number): void {
+  const width = Math.max(23, value.length * 11 + 10);
+  rect(context, x - width / 2, y - 17, width, 18, "rgba(8,36,64,.96)", "#e7b544", 1);
+  text(context, value, x, y - 8, 9, "center");
+}
+
+function drawCustomer(
+  context: CanvasRenderingContext2D,
+  customer: StoreCustomerAgent,
+  geometry: StoreViewGeometry,
+): void {
+  const pixel = agentPixel(customer, geometry);
+  if (storeArtAssets) drawAgentArtwork(context, storeArtAssets, customer, "customer", pixel);
+  else {
+    rect(context, pixel.x - 9, pixel.y - 27, 18, 34, "#315b8b", "#24303b", 1);
+    rect(context, pixel.x - 6, pixel.y - 39, 12, 12, "#dda273", "#3a2822", 1);
+  }
+  if (customer.basketUnits > 0) {
+    rect(context, pixel.x - 24, pixel.y - 4, 12, 14, "#2f79ad", "#173a53", 1);
+  }
+  let bubble: string | undefined;
+  if (customer.regular) bubble = "★";
+  if (customer.state === "browsing" && customer.targetCategory) bubble = CATEGORY_LABELS[customer.targetCategory].slice(0, 2);
+  if (customer.state === "queueing" && customer.patienceRemainingSeconds < 6) bubble = "!";
+  if (customer.state === "leaving" && customer.reason === "stockout") bubble = "品切?";
+  if (bubble) drawBubble(context, bubble, pixel.x, pixel.y - 83);
+}
+
+function drawStaff(
+  context: CanvasRenderingContext2D,
+  member: StoreStaffAgent,
+  geometry: StoreViewGeometry,
+): void {
+  const pixel = agentPixel(member, geometry);
+  if (storeArtAssets) drawAgentArtwork(context, storeArtAssets, member, "staff", pixel, member.task);
+  else {
+    rect(context, pixel.x - 9, pixel.y - 28, 18, 35, "#277e4c", "#24303b", 1);
+    rect(context, pixel.x - 6, pixel.y - 40, 12, 12, "#dda273", "#3a2822", 1);
+  }
+  if (member.carryUnits > 0) {
+    rect(context, pixel.x + 17, pixel.y - 20, 24, 18, "#bb8950", "#63472d", 1);
+  }
+  const active = member.state === "replenishing" || member.state === "cleaning";
+  if (active) drawBubble(context, member.state === "cleaning" ? "清掃中" : "補充中", pixel.x, pixel.y - 92);
+}
+
+function drawLitter(
+  context: CanvasRenderingContext2D,
+  item: { x: number; y: number },
+  geometry: StoreViewGeometry,
+): void {
+  const pixel = agentPixel(item, geometry);
+  context.fillStyle = "#f5f0df";
+  context.strokeStyle = "#8b806d";
+  context.lineWidth = 1;
+  context.beginPath();
+  context.moveTo(pixel.x - 7, pixel.y - 3);
+  context.lineTo(pixel.x + 3, pixel.y - 7);
+  context.lineTo(pixel.x + 8, pixel.y + 2);
+  context.lineTo(pixel.x - 4, pixel.y + 6);
+  context.closePath();
+  context.fill();
+  context.stroke();
+}
+
+function fixtureDepth(fixture: StoreFixture): number {
+  return Math.max(...fixture.tiles.map((tile) => tile.y)) + 0.45;
+}
+
+function drawStoreContents(
+  context: CanvasRenderingContext2D,
+  layout: StoreLayout,
+  snapshot: StoreOperationsSnapshot,
+  geometry: StoreViewGeometry,
+): void {
+  for (const litter of snapshot.litter) drawLitter(context, litter, geometry);
+
+  const items: Array<{ depth: number; draw: () => void }> = [];
+  for (const fixture of layout.fixtures) {
+    items.push({
+      depth: fixtureDepth(fixture),
+      draw: () => drawFixture(context, fixture, snapshot, geometry),
+    });
+  }
+  for (const customer of snapshot.customers) {
+    items.push({ depth: customer.y + 0.72, draw: () => drawCustomer(context, customer, geometry) });
+  }
+  for (const member of snapshot.staff) {
+    items.push({ depth: member.y + 0.73, draw: () => drawStaff(context, member, geometry) });
+  }
+  items.sort((left, right) => left.depth - right.depth);
+  for (const item of items) item.draw();
+}
+
+function drawStatusCard(
+  context: CanvasRenderingContext2D,
+  x: number,
+  width: number,
+  label: string,
+  value: string,
+  iconIndex?: number,
+  valueColor = "#fff4cf",
+): void {
+  const gradient = context.createLinearGradient(x, 3, x, 39);
+  gradient.addColorStop(0, "#123d66");
+  gradient.addColorStop(1, "#082440");
+  rect(context, x, 3, width, 36, gradient, "#e4ad3e", 2);
+  if (storeArtAssets && iconIndex !== undefined) drawUiIcon(context, storeArtAssets, iconIndex, x + 7, 8, 25);
+  const textX = x + (iconIndex === undefined ? 9 : 38);
+  text(context, label, textX, 12, 8, "left", "#b8d5e8");
+  text(context, value, textX, 27, 13, "left", valueColor);
 }
 
 function drawHud(context: CanvasRenderingContext2D, snapshot: StoreOperationsSnapshot): void {
-  rect(context, 0, 0, LOGICAL_WIDTH, 34, "#082440", "#e2aa3b", 2);
-  if (storeArtAssets) {
-    drawUiIcon(context, storeArtAssets, 0, 105, 4, 26);
-    drawUiIcon(context, storeArtAssets, 7, 230, 4, 26);
-  }
-  text(context, `${currentDay()}日目`, 18, 17, 16);
-  text(context, optional("time-label")?.textContent ?? "06:00", 142, 17, 16);
-  text(context, optional("weather-label")?.textContent ?? "晴れ", 266, 17, 14);
-  text(context, `所持金 ${optional("cash-label")?.textContent ?? "—"}`, 430, 17, 16);
+  rect(context, 0, 0, LOGICAL_WIDTH, 42, "#06192d", "#e4ad3e", 2);
+  drawStatusCard(context, 8, 94, "営業日", `${currentDay()}日目`);
+  drawStatusCard(context, 108, 113, "時刻", optional("time-label")?.textContent ?? "06:00", 0);
+  drawStatusCard(context, 227, 136, "天気", optional("weather-label")?.textContent ?? "晴れ", 7);
+  drawStatusCard(context, 369, 232, "所持金", optional("cash-label")?.textContent ?? "—", 6);
+  drawStatusCard(context, 607, 158, "店内売上", `¥${snapshot.kpis.revenue.toLocaleString("ja-JP")}`, 5);
   const status = isStoreOpen() ? (isPlaying() ? "営業中" : "一時停止") : "営業時間外";
-  text(context, status, 876, 17, 14, "center", isStoreOpen() ? "#fff4cf" : "#f4b2a9");
-  text(context, `店内売上 ¥${snapshot.kpis.revenue.toLocaleString("ja-JP")}`, 1064, 17, 13, "right");
+  drawStatusCard(context, 771, 145, "営業状態", status, undefined, isStoreOpen() ? "#fff4cf" : "#ffb5a8");
+  drawStatusCard(context, 922, 150, "来店／会計", `${snapshot.kpis.enteredCustomers}／${snapshot.kpis.transactions}人`, 4);
 }
 
-function drawPerson(
+function drawInventoryBar(
   context: CanvasRenderingContext2D,
-  agent: StoreCustomerAgent | StoreStaffAgent,
-  uniform: boolean,
-  bubble?: string,
-  carryBox = false,
-  task?: StoreStaffTask,
+  x: number,
+  y: number,
+  width: number,
+  categoryId: StoreCategoryId,
+  snapshot: StoreOperationsSnapshot,
 ): void {
-  const pixel = agentPixel(agent);
-  if (storeArtAssets && drawAgentArtwork(context, storeArtAssets, agent, uniform ? "staff" : "customer", pixel, task)) {
-    if (bubble) {
-      const width = Math.max(20, bubble.length * 10 + 8);
-      rect(context, pixel.x - width / 2, pixel.y - 43, width, 17, "#082440", "#e2aa3b", 1);
-      text(context, bubble, pixel.x, pixel.y - 34, 9, "center");
-    }
-    return;
-  }
-  const bob = Math.sin(performance.now() / 150 + agent.variant) * 1.2;
-  const skin = ["#dda273", "#c98d63", "#edba8c", "#b97a54"][agent.variant % 4] ?? "#dda273";
-  const shirt = uniform ? "#277e4c" : ["#315b8b", "#a9463c", "#73508b", "#b1812d", "#37735d"][agent.variant % 5] ?? "#315b8b";
-  context.fillStyle = "rgba(34,27,22,.28)";
-  context.fillRect(pixel.x - 8, pixel.y + 11, 17, 5);
-  rect(context, pixel.x - 6, pixel.y - 15 + bob, 13, 12, skin, "#3a2822", 1);
-  rect(context, pixel.x - 8, pixel.y - 3 + bob, 17, 17, shirt, "#26313b", 1);
-  rect(context, pixel.x - 7, pixel.y + 14 + bob, 6, 7, "#273b59", "#1c2733", 1);
-  rect(context, pixel.x + 3, pixel.y + 14 + bob, 6, 7, "#273b59", "#1c2733", 1);
-  if (carryBox) rect(context, pixel.x + 9, pixel.y + 1, 14, 11, "#b98b51", "#65472e", 1);
-  if (bubble) {
-    const width = Math.max(20, bubble.length * 10 + 8);
-    rect(context, pixel.x - width / 2, pixel.y - 35, width, 16, "#082440", "#e2aa3b", 1);
-    text(context, bubble, pixel.x, pixel.y - 27, 9, "center");
-  }
+  const inventory = snapshot.inventories[categoryId];
+  const ratio = inventory.shelfCapacity > 0 ? inventory.shelfUnits / inventory.shelfCapacity : 0;
+  text(context, CATEGORY_LABELS[categoryId], x, y, 9);
+  rect(context, x, y + 11, width, 9, "#31475a", "#172637", 1);
+  const color = ratio < 0.2 ? "#c53e38" : ratio < 0.45 ? "#d5962f" : "#5cac67";
+  rect(context, x + 1, y + 12, Math.max(0, (width - 2) * ratio), 7, color, color, 0);
+  text(context, `${inventory.shelfUnits}/${inventory.shelfCapacity}`, x + width, y, 9, "right", "#dceaf0");
 }
 
-function drawAgents(context: CanvasRenderingContext2D, snapshot: StoreOperationsSnapshot): void {
-  for (const item of snapshot.litter) {
-    const pixel = agentPixel(item);
-    context.fillStyle = "#f1eee0";
-    context.beginPath();
-    context.moveTo(pixel.x - 5, pixel.y - 3);
-    context.lineTo(pixel.x + 4, pixel.y - 5);
-    context.lineTo(pixel.x + 6, pixel.y + 3);
-    context.lineTo(pixel.x - 4, pixel.y + 5);
-    context.closePath();
-    context.fill();
-  }
+function drawFooter(context: CanvasRenderingContext2D, snapshot: StoreOperationsSnapshot, geometry: StoreViewGeometry): void {
+  const y = geometry.footerY;
+  rect(context, 0, y, LOGICAL_WIDTH, LOGICAL_HEIGHT - y, "#071e36", "#e4ad3e", 2);
+  const categories = Object.keys(CATEGORY_LABELS) as StoreCategoryId[];
+  categories.forEach((categoryId, index) => {
+    drawInventoryBar(context, 14 + index * 118, y + 15, 105, categoryId, snapshot);
+  });
 
-  for (const customer of snapshot.customers) {
-    let bubble: string | undefined;
-    if (customer.regular) bubble = "★";
-    if (customer.state === "browsing") bubble = customer.targetCategory ? CATEGORY_LABELS[customer.targetCategory].slice(0, 2) : undefined;
-    if (customer.state === "queueing" && customer.patienceRemainingSeconds < 6) bubble = "!";
-    if (customer.state === "leaving" && customer.reason === "stockout") bubble = "品切?";
-    drawPerson(context, customer, false, bubble, false);
-    if (customer.basketUnits > 0) {
-      const pixel = agentPixel(customer);
-      rect(context, pixel.x - 15, pixel.y + 3, 7, 9, "#2e6fa3", "#153750", 1);
-    }
-  }
-
-  for (const member of snapshot.staff) {
-    const carry = member.carryUnits > 0;
-    const label = member.state === "replenishing" ? "補充中" : member.state === "cleaning" ? "清掃中" : TASK_LABELS[member.task];
-    drawPerson(context, member, true, label, carry, member.task);
-  }
-}
-
-function drawSidePanel(context: CanvasRenderingContext2D, snapshot: StoreOperationsSnapshot): void {
-  const x = 920;
-  rect(context, x, GRID_Y, 148, 368, "#0a2a49", "#e2aa3b", 2);
-  text(context, "営業状況", x + 74, GRID_Y + 18, 13, "center");
+  const kpiX = 850;
   const rows: Array<[string, string, string?]> = [
-    ["入店", `${snapshot.kpis.enteredCustomers}人`],
-    ["会計", `${snapshot.kpis.transactions}人`],
-    ["販売", `${snapshot.kpis.unitsSold}点`],
     ["行列", `${snapshot.queueCustomerIds.length}人`, snapshot.queueCustomerIds.length >= 5 ? "#ff9d8e" : undefined],
-    ["欠品遭遇", `${snapshot.kpis.stockoutEncounters}件`, snapshot.kpis.stockoutEncounters > 0 ? "#ffbd78" : undefined],
-    ["離脱", `${snapshot.kpis.queueAbandonments + snapshot.kpis.noPurchaseExits}人`],
-    ["ゴミ", `${snapshot.litter.length}個`, snapshot.litter.length >= 4 ? "#ffbd78" : undefined],
+    ["欠品遭遇", `${snapshot.kpis.stockoutEncounters}件`, snapshot.kpis.stockoutEncounters > 0 ? "#ffbe78" : undefined],
+    ["離脱", `${snapshot.kpis.noPurchaseExits + snapshot.kpis.queueAbandonments}人`],
   ];
   rows.forEach(([label, value, color], index) => {
-    const y = GRID_Y + 46 + index * 31;
-    text(context, label, x + 10, y, 11, "left", "#b9d3e3");
-    text(context, value, x + 137, y, 12, "right", color ?? "#fff4cf");
-    context.strokeStyle = "rgba(226,170,59,.22)";
-    context.beginPath();
-    context.moveTo(x + 8, y + 15);
-    context.lineTo(x + 140, y + 15);
-    context.stroke();
+    const x = kpiX + (index % 3) * 75;
+    rect(context, x, y + 11, 68, 48, "#0d3154", "#315e7d", 1);
+    text(context, label, x + 34, y + 24, 8, "center", "#b8d5e8");
+    text(context, value, x + 34, y + 43, 12, "center", color ?? "#fff4cf");
   });
-
-  text(context, "店員配置", x + 74, GRID_Y + 276, 12, "center");
-  const assignments = snapshot.assignments;
-  text(context, `レジ ${assignments.register}`, x + 14, GRID_Y + 304, 11);
-  text(context, `補充 ${assignments.replenishment}`, x + 14, GRID_Y + 328, 11);
-  text(context, `清掃 ${assignments.cleaning}`, x + 14, GRID_Y + 352, 11);
-}
-
-function drawFooter(context: CanvasRenderingContext2D, snapshot: StoreOperationsSnapshot): void {
-  rect(context, 0, 412, LOGICAL_WIDTH, 88, "#082440", "#e2aa3b", 2);
-  const inventoryRows = Object.values(snapshot.inventories);
-  inventoryRows.forEach((inventory, index) => {
-    const x = 14 + index * 128;
-    const ratio = inventory.shelfUnits / inventory.shelfCapacity;
-    text(context, CATEGORY_LABELS[inventory.categoryId], x, 432, 9);
-    rect(context, x, 446, 104, 12, "#374653", "#17222e", 1);
-    rect(context, x + 1, 447, Math.max(0, 102 * ratio), 10, ratio < 0.2 ? "#bc3b35" : ratio < 0.45 ? "#d58d2d" : "#58a765", "#58a765", 0);
-    text(context, `棚${inventory.shelfUnits}/${inventory.shelfCapacity}`, x, 474, 9);
-  });
-  text(context, `最大行列 ${snapshot.kpis.maximumQueueLength}人`, 1064, 436, 11, "right");
-  text(context, `補充 ${snapshot.kpis.replenishedUnits}点`, 1064, 458, 11, "right");
-  text(context, `清掃 ${snapshot.kpis.litterCleaned}件`, 1064, 480, 11, "right");
 }
 
 function drawFrame(
   context: CanvasRenderingContext2D,
   layout: StoreLayout,
   snapshot: StoreOperationsSnapshot,
+  editorOpen: boolean,
 ): void {
+  const geometry = editorOpen ? EDITOR_GEOMETRY : PLAY_GEOMETRY;
   context.clearRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
+  const background = context.createLinearGradient(0, 0, 0, LOGICAL_HEIGHT);
+  background.addColorStop(0, "#0b2b49");
+  background.addColorStop(1, "#061523");
+  context.fillStyle = background;
+  context.fillRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
   drawHud(context, snapshot);
-  drawFloor(context, layout);
-  for (const fixture of layout.fixtures) drawFixture(context, fixture, snapshot);
-  drawAgents(context, snapshot);
-  drawSidePanel(context, snapshot);
-  drawFooter(context, snapshot);
+  drawFloor(context, layout, geometry);
+  drawStoreContents(context, layout, snapshot, geometry);
+  drawFooter(context, snapshot, geometry);
 }
 
 function buildShell(): HTMLElement {
@@ -484,6 +510,7 @@ function buildShell(): HTMLElement {
   shell.innerHTML = `
     <section class="store-game-stage" aria-label="コンビニ店内営業">
       <canvas id="store-game-canvas" width="1080" height="500"></canvas>
+      <button type="button" class="store-game-menu" data-game-action="detail" aria-label="詳細設定">詳細</button>
       <div class="orientation-message">端末を横向きにしてください</div>
     </section>
     <nav class="store-game-nav" aria-label="主要メニュー">
@@ -494,8 +521,7 @@ function buildShell(): HTMLElement {
       <button type="button" data-game-action="staff"><span class="store-nav-icon store-nav-icon--staff" aria-hidden="true"></span><b>人員</b></button>
       <button type="button" data-game-action="info"><span class="store-nav-icon store-nav-icon--info" aria-hidden="true"></span><b>情報</b></button>
     </nav>
-    <button type="button" class="store-game-menu" data-game-action="detail">詳細</button>
-    <section id="store-staff-panel" class="store-staff-panel" hidden>
+    <section class="store-staff-panel" id="store-staff-panel" hidden>
       <header><strong>店員配置</strong><button type="button" data-close-staff>閉じる</button></header>
       <p>営業中でも担当を変更できます。合計人数は現在のシフトと同じです。</p>
       <div class="staff-assignment-grid"></div>
@@ -505,10 +531,9 @@ function buildShell(): HTMLElement {
   return shell;
 }
 
-function openDetail(target: "store" | "product" | "order" | "info" | "detail"): void {
+function openDetail(target: "product" | "order" | "info" | "detail"): void {
   document.body.classList.add("store-detail-open");
   const map: Record<typeof target, string> = {
-    store: "store-panel",
     product: "category-area-controls",
     order: "ordering-policy-select",
     info: "report-panel",
@@ -534,7 +559,7 @@ function saveEngine(engine: StoreOperationsEngine): void {
   try {
     window.localStorage.setItem(STORE_SAVE_KEY, JSON.stringify(engine.serialize()));
   } catch {
-    // Browser storage can be unavailable in private modes; gameplay continues without it.
+    // Gameplay continues when storage is unavailable.
   }
 }
 
@@ -574,6 +599,7 @@ function renderStaffPanel(panel: HTMLElement, snapshot: StoreOperationsSnapshot)
 
 function bindNavigation(
   shell: HTMLElement,
+  layoutEditor: StoreLayoutEditorUi,
   getEngine: () => StoreOperationsEngine,
   replaceEngine: (engine: StoreOperationsEngine) => void,
 ): void {
@@ -605,12 +631,16 @@ function bindNavigation(
       button.setAttribute("aria-pressed", String(isPlaying()));
       return;
     }
+    if (action === "store") {
+      layoutEditor.open();
+      return;
+    }
     if (action === "staff" && staffPanel) {
       renderStaffPanel(staffPanel, getEngine().getSnapshot());
       staffPanel.hidden = !staffPanel.hidden;
       return;
     }
-    if (action === "store" || action === "product" || action === "order" || action === "info" || action === "detail") {
+    if (action === "product" || action === "order" || action === "info" || action === "detail") {
       openDetail(action);
     }
   });
@@ -625,7 +655,7 @@ function bindNavigation(
   optional<HTMLButtonElement>("reset-button")?.addEventListener("click", () => {
     window.localStorage.removeItem(STORE_SAVE_KEY);
     const seed = Math.round(numberFrom(optional<HTMLInputElement>("seed-input")?.value) || 1977);
-    replaceEngine(createStoreOperationsEngine(seed));
+    replaceEngine(createStoreOperationsEngine(seed, loadSavedStoreLayout()));
   });
 }
 
@@ -639,8 +669,9 @@ function start(): void {
   document.body.classList.add("store-game-mode");
   const shell = buildShell();
   const canvas = optional<HTMLCanvasElement>("store-game-canvas");
-  const context = canvas?.getContext("2d", { alpha: false });
-  if (!canvas || !context) return;
+  const contextCandidate = canvas?.getContext("2d", { alpha: false });
+  if (!canvas || !contextCandidate) return;
+  const context: CanvasRenderingContext2D = contextCandidate;
   const resizeCanvas = (): void => {
     configureHiDpiCanvas(canvas, context, LOGICAL_WIDTH, LOGICAL_HEIGHT);
   };
@@ -667,14 +698,14 @@ function start(): void {
     layout = next.getLayout();
     knownDay = currentDay();
   };
-  bindNavigation(shell, getEngine, replaceEngine);
-  createStoreLayoutEditorUi({
+  const layoutEditor = createStoreLayoutEditorUi({
     shell,
     canvas,
     getEngine,
     replaceEngine,
     canEdit: () => !isPlaying() && engine.getSnapshot().customers.length === 0,
   });
+  bindNavigation(shell, layoutEditor, getEngine, replaceEngine);
 
   engine.advance(0.01, engineContext());
 
@@ -690,7 +721,7 @@ function start(): void {
     else engine.advance(0.001, engineContext());
 
     const snapshot = engine.getSnapshot();
-    drawFrame(context, layout, snapshot);
+    drawFrame(context, layout, snapshot, layoutEditor.isOpen());
     const timeButton = shell.querySelector<HTMLButtonElement>("[data-game-action='time']");
     if (timeButton) timeButton.setAttribute("aria-pressed", String(isPlaying()));
 
