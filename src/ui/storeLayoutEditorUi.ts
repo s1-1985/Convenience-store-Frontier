@@ -20,6 +20,7 @@ import {
   storeFixtureBounds,
   type StoreLayoutEvaluation,
 } from "../game/storeLayoutEditor.js";
+import { configureHiDpiCanvas } from "./storeCanvasResolution.js";
 import "./storeLayoutEditor.css";
 
 const STORE_LAYOUT_SAVE_KEY = "convenience-store-frontier.store-layout.v1";
@@ -264,7 +265,11 @@ export function createStoreLayoutEditorUi(options: StoreLayoutEditorUiOptions): 
   const contextCandidate = overlay.getContext("2d");
   if (!contextCandidate) throw new Error("Store layout editor canvas is unavailable");
   const overlayContext: CanvasRenderingContext2D = contextCandidate;
-  overlayContext.imageSmoothingEnabled = false;
+  const resizeOverlay = (): void => {
+    configureHiDpiCanvas(overlay, overlayContext, LOGICAL_WIDTH, LOGICAL_HEIGHT);
+  };
+  resizeOverlay();
+  window.addEventListener("resize", resizeOverlay);
 
   const panel = createPanel();
   options.shell.append(panel);
@@ -457,6 +462,7 @@ export function createStoreLayoutEditorUi(options: StoreLayoutEditorUiOptions): 
       panel.removeEventListener("click", handlePanelClick);
       options.shell.removeEventListener("click", handleShellCapture, true);
       document.getElementById("reset-button")?.removeEventListener("click", handleResetCapture, true);
+      window.removeEventListener("resize", resizeOverlay);
       overlay.remove();
       panel.remove();
     },

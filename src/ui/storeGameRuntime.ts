@@ -4,12 +4,14 @@ import {
   restoreStoreOperationsEngine,
   type SerializedStoreOperations,
   type StoreCategoryId,
+  type StoreCustomerAgent,
   type StoreEngineContext,
   type StoreFixture,
   type StoreLayout,
   type StoreOperationsEngine,
   type StoreOperationsSnapshot,
   type StoreStaffAssignments,
+  type StoreStaffAgent,
   type StoreStaffTask,
   type TilePoint,
 } from "../game/storeOperationsEngine.js";
@@ -17,6 +19,14 @@ import {
   createStoreLayoutEditorUi,
   loadSavedStoreLayout,
 } from "./storeLayoutEditorUi.js";
+import { configureHiDpiCanvas } from "./storeCanvasResolution.js";
+import {
+  drawAgentArtwork,
+  drawFixtureArtwork,
+  drawUiIcon,
+  loadStoreArtAssets,
+  type StoreArtAssets,
+} from "./storeArtAssets.js";
 import "./storeGame.css";
 
 const LOGICAL_WIDTH = 1080;
@@ -26,6 +36,7 @@ const GRID_Y = 38;
 const TILE_WIDTH = 28;
 const TILE_HEIGHT = 23;
 const STORE_SAVE_KEY = "convenience-store-frontier.store-operations.v1";
+let storeArtAssets: StoreArtAssets | undefined;
 
 const CATEGORY_LABELS: Record<StoreCategoryId, string> = {
   drinks: "飲料",
@@ -162,7 +173,7 @@ function text(
   color = "#fff4cf",
 ): void {
   context.save();
-  context.font = `800 ${size}px monospace`;
+  context.font = `800 ${size}px system-ui, -apple-system, "Noto Sans JP", sans-serif`;
   context.textAlign = align;
   context.textBaseline = "middle";
   context.fillStyle = color;
@@ -248,6 +259,42 @@ function drawProducts(
 
 function drawFixture(context: CanvasRenderingContext2D, fixture: StoreFixture, snapshot: StoreOperationsSnapshot): void {
   const bounds = fixtureBounds(fixture);
+  const artwork = storeArtAssets
+    ? drawFixtureArtwork(context, storeArtAssets, fixture, snapshot, bounds)
+    : undefined;
+  if (artwork) {
+    const label = fixture.categoryId
+      ? CATEGORY_LABELS[fixture.categoryId]
+      : fixture.kind === "entrance"
+        ? "入口"
+        : fixture.kind === "backroom"
+          ? "バックヤード"
+          : fixture.kind === "register"
+            ? "レジ"
+            : undefined;
+    if (label) {
+      text(context, label, artwork.labelX, artwork.labelY, label.length >= 7 ? 8 : 10, "center");
+    }
+    if (fixture.categoryId) {
+      const inventory = snapshot.inventories[fixture.categoryId];
+      const ratio = inventory.shelfCapacity > 0 ? inventory.shelfUnits / inventory.shelfCapacity : 0;
+      if (ratio <= 0.35) {
+        const warning = ratio <= 0.02 ? "品切れ" : "残り少";
+        rect(
+          context,
+          bounds.x + bounds.width - 48,
+          bounds.y + bounds.height - 19,
+          46,
+          17,
+          ratio <= 0.02 ? "#ac3030" : "#d18b25",
+          "#fff0ad",
+          1,
+        );
+        text(context, warning, bounds.x + bounds.width - 25, bounds.y + bounds.height - 10, 8, "center");
+      }
+    }
+    return;
+  }
   if (fixture.kind === "entrance") {
     rect(context, bounds.x, bounds.y - 5, bounds.width, bounds.height + 5, "#92c2cc", "#2c4e58", 2);
     rect(context, bounds.x + bounds.width / 2 - 2, bounds.y - 4, 4, bounds.height + 3, "#e9f7f3", "#e9f7f3", 0);
@@ -290,6 +337,10 @@ function drawFixture(context: CanvasRenderingContext2D, fixture: StoreFixture, s
 
 function drawHud(context: CanvasRenderingContext2D, snapshot: StoreOperationsSnapshot): void {
   rect(context, 0, 0, LOGICAL_WIDTH, 34, "#082440", "#e2aa3b", 2);
+  if (storeArtAssets) {
+    drawUiIcon(context, storeArtAssets, 0, 105, 4, 26);
+    drawUiIcon(context, storeArtAssets, 7, 230, 4, 26);
+  }
   text(context, `${currentDay()}日目`, 18, 17, 16);
   text(context, optional("time-label")?.textContent ?? "06:00", 142, 17, 16);
   text(context, optional("weather-label")?.textContent ?? "晴れ", 266, 17, 14);
@@ -301,12 +352,21 @@ function drawHud(context: CanvasRenderingContext2D, snapshot: StoreOperationsSna
 
 function drawPerson(
   context: CanvasRenderingContext2D,
-  agent: { x: number; y: number; variant: number },
+  agent: StoreCustomerAgent | StoreStaffAgent,
   uniform: boolean,
   bubble?: string,
   carryBox = false,
+  task?: StoreStaffTask,
 ): void {
   const pixel = agentPixel(agent);
+  if (storeArtAssets && drawAgentArtwork(context, storeArtAssets, agent, uniform ? "staff" : "customer", pixel, task)) {
+    if (bubble) {
+      const width = Math.max(20, bubble.length * 10 + 8);
+      rect(context, pixel.x - width / 2, pixel.y - 43, width, 17, "#082440", "#e2aa3b", 1);
+      text(context, bubble, pixel.x, pixel.y - 34, 9, "center");
+    }
+    return;
+  }
   const bob = Math.sin(performance.now() / 150 + agent.variant) * 1.2;
   const skin = ["#dda273", "#c98d63", "#edba8c", "#b97a54"][agent.variant % 4] ?? "#dda273";
   const shirt = uniform ? "#277e4c" : ["#315b8b", "#a9463c", "#73508b", "#b1812d", "#37735d"][agent.variant % 5] ?? "#315b8b";
@@ -353,7 +413,7 @@ function drawAgents(context: CanvasRenderingContext2D, snapshot: StoreOperations
   for (const member of snapshot.staff) {
     const carry = member.carryUnits > 0;
     const label = member.state === "replenishing" ? "補充中" : member.state === "cleaning" ? "清掃中" : TASK_LABELS[member.task];
-    drawPerson(context, member, true, label, carry);
+    drawPerson(context, member, true, label, carry, member.task);
   }
 }
 
@@ -427,12 +487,12 @@ function buildShell(): HTMLElement {
       <div class="orientation-message">端末を横向きにしてください</div>
     </section>
     <nav class="store-game-nav" aria-label="主要メニュー">
-      <button type="button" data-game-action="time"><span>▶</span><b>時間</b></button>
-      <button type="button" data-game-action="store"><span>▣</span><b>店舗</b></button>
-      <button type="button" data-game-action="product"><span>箱</span><b>商品</b></button>
-      <button type="button" data-game-action="order"><span>票</span><b>発注</b></button>
-      <button type="button" data-game-action="staff"><span>人</span><b>人員</b></button>
-      <button type="button" data-game-action="info"><span>▥</span><b>情報</b></button>
+      <button type="button" data-game-action="time"><span class="store-nav-icon store-nav-icon--time" aria-hidden="true"></span><b>時間</b></button>
+      <button type="button" data-game-action="store"><span class="store-nav-icon store-nav-icon--store" aria-hidden="true"></span><b>店舗</b></button>
+      <button type="button" data-game-action="product"><span class="store-nav-icon store-nav-icon--product" aria-hidden="true"></span><b>商品</b></button>
+      <button type="button" data-game-action="order"><span class="store-nav-icon store-nav-icon--order" aria-hidden="true"></span><b>発注</b></button>
+      <button type="button" data-game-action="staff"><span class="store-nav-icon store-nav-icon--staff" aria-hidden="true"></span><b>人員</b></button>
+      <button type="button" data-game-action="info"><span class="store-nav-icon store-nav-icon--info" aria-hidden="true"></span><b>情報</b></button>
     </nav>
     <button type="button" class="store-game-menu" data-game-action="detail">詳細</button>
     <section id="store-staff-panel" class="store-staff-panel" hidden>
@@ -542,7 +602,7 @@ function bindNavigation(
     const action = button.dataset.gameAction;
     if (action === "time") {
       optional<HTMLButtonElement>("play-button")?.click();
-      button.querySelector("span")!.textContent = isPlaying() ? "■" : "▶";
+      button.setAttribute("aria-pressed", String(isPlaying()));
       return;
     }
     if (action === "staff" && staffPanel) {
@@ -581,7 +641,14 @@ function start(): void {
   const canvas = optional<HTMLCanvasElement>("store-game-canvas");
   const context = canvas?.getContext("2d", { alpha: false });
   if (!canvas || !context) return;
-  context.imageSmoothingEnabled = false;
+  const resizeCanvas = (): void => {
+    configureHiDpiCanvas(canvas, context, LOGICAL_WIDTH, LOGICAL_HEIGHT);
+  };
+  resizeCanvas();
+  window.addEventListener("resize", resizeCanvas);
+  void loadStoreArtAssets().then((assets) => {
+    storeArtAssets = assets;
+  });
 
   const seed = Math.round(numberFrom(optional<HTMLInputElement>("seed-input")?.value) || 1977);
   const saved = readSavedEngine();
@@ -624,8 +691,8 @@ function start(): void {
 
     const snapshot = engine.getSnapshot();
     drawFrame(context, layout, snapshot);
-    const timeIcon = shell.querySelector<HTMLElement>("[data-game-action='time'] span");
-    if (timeIcon) timeIcon.textContent = isPlaying() ? "■" : "▶";
+    const timeButton = shell.querySelector<HTMLButtonElement>("[data-game-action='time']");
+    if (timeButton) timeButton.setAttribute("aria-pressed", String(isPlaying()));
 
     if (timestamp - lastSaveTimestamp >= 2000) {
       saveEngine(engine);
