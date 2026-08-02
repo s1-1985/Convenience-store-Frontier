@@ -25,17 +25,19 @@ export interface FixtureArtworkPlacement {
   labelX: number;
   labelY: number;
   labelWidth: number;
+  warningX: number;
+  warningY: number;
 }
 
 export type AgentFacing = "front" | "left" | "right" | "back";
 
-const FIXTURE_CELL_WIDTH = 384;
-const FIXTURE_CELL_HEIGHT = 256;
-const STAFF_CELL_WIDTH = 192;
-const STAFF_CELL_HEIGHT = 256;
-const CUSTOMER_CELL_WIDTH = 160;
-const CUSTOMER_CELL_HEIGHT = 220;
-const ICON_CELL_SIZE = 128;
+const FIXTURE_CELL_WIDTH = 144;
+const FIXTURE_CELL_HEIGHT = 96;
+const STAFF_CELL_WIDTH = 72;
+const STAFF_CELL_HEIGHT = 96;
+const CUSTOMER_CELL_WIDTH = 64;
+const CUSTOMER_CELL_HEIGHT = 88;
+const ICON_CELL_SIZE = 48;
 
 const FIXTURE_INDEX: Record<string, number> = {
   entrance: 0,
@@ -65,11 +67,13 @@ const FACING_COLUMN: Record<AgentFacing, number> = {
   back: 3,
 };
 
+const CUSTOMER_ROWS = [0, 1, 2, 3, 4, 5] as const;
+
 const ASSET_URLS = {
-  fixtures: "/assets/store/fixtures.svg",
-  staff: "/assets/store/staff.svg",
-  customers: "/assets/store/customers.svg",
-  icons: "/assets/store/icons.svg",
+  fixtures: "/assets/store/fixtures.webp",
+  staff: "/assets/store/staff.webp",
+  customers: "/assets/store/customers.webp",
+  icons: "/assets/store/icons.webp",
 } as const;
 
 function loadImage(url: string): Promise<HTMLImageElement> {
@@ -158,6 +162,17 @@ function drawAtlasCell(
   );
 }
 
+function fixtureLabelColor(fixture: StoreFixture): string {
+  if (fixture.categoryId === "ready_meal") return "#b94d32";
+  if (fixture.categoryId === "dessert") return "#398558";
+  if (fixture.categoryId === "magazines") return "#704596";
+  if (fixture.categoryId === "instant") return "#43864a";
+  if (fixture.categoryId === "daily_goods") return "#a53d37";
+  if (fixture.kind === "entrance") return "#25745c";
+  if (fixture.kind === "register") return "#356741";
+  return "#245e99";
+}
+
 export function drawFixtureArtwork(
   context: CanvasRenderingContext2D,
   assets: StoreArtAssets,
@@ -170,45 +185,29 @@ export function drawFixtureArtwork(
 
   const rotatable = fixture.kind === "shelf" || fixture.kind === "cold_case";
   const rotated = rotatable && bounds.height > bounds.width;
-  const footprintWidth = rotated ? bounds.height : bounds.width;
-  const footprintHeight = rotated ? bounds.width : bounds.height;
-  const widthMultiplier = fixture.kind === "backroom" ? 1.18 : fixture.kind === "waste" ? 1.35 : 1.08;
-  const visualWidth = footprintWidth * widthMultiplier;
-  const aspectHeight = visualWidth * (FIXTURE_CELL_HEIGHT / FIXTURE_CELL_WIDTH);
-  const heightMultiplier = fixture.kind === "entrance" ? 3.05 : fixture.kind === "register" ? 1.82 : 2.65;
-  const visualHeight = Math.max(footprintHeight * heightMultiplier, aspectHeight);
-  const inventory = fixture.categoryId ? snapshot.inventories[fixture.categoryId] : undefined;
-  const stockRatio = inventory && inventory.shelfCapacity > 0
-    ? Math.max(0, Math.min(1, inventory.shelfUnits / inventory.shelfCapacity))
-    : 1;
-
-  const labelColor = fixture.categoryId === "ready_meal"
-    ? "#bd5637"
-    : fixture.categoryId === "dessert"
-      ? "#4c8957"
-      : fixture.categoryId === "magazines"
-        ? "#76559c"
-        : fixture.kind === "entrance"
-          ? "#2f765f"
-          : "#315f95";
-  const unrotatedDestination: DrawBounds = {
+  const longFootprint = Math.max(bounds.width, bounds.height);
+  const widthFactor = fixture.kind === "register" ? 1.16 : fixture.kind === "waste" ? 1.28 : 1.12;
+  const visualWidth = Math.max(80, longFootprint * widthFactor);
+  const naturalHeight = visualWidth * (FIXTURE_CELL_HEIGHT / FIXTURE_CELL_WIDTH);
+  const minimumHeight = fixture.kind === "register"
+    ? Math.max(92, bounds.height * 1.28)
+    : fixture.kind === "waste"
+      ? Math.max(64, bounds.height * 1.75)
+      : Math.max(88, Math.min(126, bounds.height * 2.45));
+  const visualHeight = Math.max(naturalHeight, minimumHeight);
+  const destination: DrawBounds = {
     x: bounds.x + (bounds.width - visualWidth) / 2,
-    y: bounds.y + bounds.height - visualHeight + 4,
+    y: bounds.y + bounds.height - visualHeight + 5,
     width: visualWidth,
     height: visualHeight,
   };
 
   context.save();
-  context.globalAlpha = 0.58 + stockRatio * 0.42;
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
   if (rotated) {
     context.translate(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
     context.rotate(Math.PI / 2);
-    const destination: DrawBounds = {
-      x: -footprintWidth / 2 - (visualWidth - footprintWidth) / 2,
-      y: footprintHeight / 2 - visualHeight + 4,
-      width: visualWidth,
-      height: visualHeight,
-    };
     drawAtlasCell(
       context,
       assets.fixtures,
@@ -216,15 +215,12 @@ export function drawFixtureArtwork(
       4,
       FIXTURE_CELL_WIDTH,
       FIXTURE_CELL_HEIGHT,
-      destination,
-    );
-    context.globalAlpha = 0.96;
-    context.fillStyle = labelColor;
-    context.fillRect(
-      destination.x + destination.width * 0.13,
-      destination.y + destination.height * 0.08,
-      destination.width * 0.74,
-      Math.max(13, destination.height * 0.15),
+      {
+        x: -visualWidth / 2,
+        y: bounds.width / 2 - visualHeight + 5,
+        width: visualWidth,
+        height: visualHeight,
+      },
     );
   } else {
     drawAtlasCell(
@@ -234,25 +230,29 @@ export function drawFixtureArtwork(
       4,
       FIXTURE_CELL_WIDTH,
       FIXTURE_CELL_HEIGHT,
-      unrotatedDestination,
-    );
-    context.globalAlpha = 0.96;
-    context.fillStyle = labelColor;
-    context.fillRect(
-      unrotatedDestination.x + unrotatedDestination.width * 0.13,
-      unrotatedDestination.y + unrotatedDestination.height * 0.08,
-      unrotatedDestination.width * 0.74,
-      Math.max(13, unrotatedDestination.height * 0.15),
+      destination,
     );
   }
   context.restore();
 
+  const labelWidth = Math.max(52, visualWidth * 0.7);
+  const labelHeight = Math.max(15, Math.min(21, visualHeight * 0.17));
+  const labelX = bounds.x + bounds.width / 2;
+  const labelY = rotated ? bounds.y + bounds.height / 2 : destination.y + labelHeight * 0.88;
+  context.save();
+  context.fillStyle = fixtureLabelColor(fixture);
+  context.strokeStyle = "rgba(255,244,207,.92)";
+  context.lineWidth = 1;
+  context.fillRect(labelX - labelWidth / 2, labelY - labelHeight / 2, labelWidth, labelHeight);
+  context.strokeRect(labelX - labelWidth / 2, labelY - labelHeight / 2, labelWidth, labelHeight);
+  context.restore();
+
   return {
-    labelX: bounds.x + bounds.width / 2,
-    labelY: rotated
-      ? bounds.y + bounds.height / 2
-      : unrotatedDestination.y + Math.max(12, unrotatedDestination.height * 0.155),
-    labelWidth: Math.max(42, visualWidth * 0.68),
+    labelX,
+    labelY,
+    labelWidth,
+    warningX: bounds.x + bounds.width - 3,
+    warningY: bounds.y + bounds.height - 3,
   };
 }
 
@@ -266,19 +266,21 @@ export function drawAgentArtwork(
 ): boolean {
   const facing = resolveAgentFacing(agent);
   const column = FACING_COLUMN[facing];
-  const bob = Math.sin(performance.now() / 165 + agent.variant) * 1.1;
+  const bob = Math.sin(performance.now() / 170 + agent.variant) * 1.3;
   const isStaff = role === "staff";
   const cellWidth = isStaff ? STAFF_CELL_WIDTH : CUSTOMER_CELL_WIDTH;
   const cellHeight = isStaff ? STAFF_CELL_HEIGHT : CUSTOMER_CELL_HEIGHT;
-  const row = isStaff ? STAFF_ROW[task ?? "register"] : Math.abs(agent.variant) % 8;
+  const row = isStaff
+    ? STAFF_ROW[task ?? "register"]
+    : CUSTOMER_ROWS[Math.abs(agent.variant) % CUSTOMER_ROWS.length] ?? 0;
   const image = isStaff ? assets.staff : assets.customers;
-  const drawWidth = isStaff ? 47 : 42;
-  const drawHeight = isStaff ? 63 : 58;
+  const drawWidth = isStaff ? 70 : 62;
+  const drawHeight = isStaff ? 94 : 85;
 
   context.save();
-  context.fillStyle = "rgba(23, 18, 14, .25)";
+  context.fillStyle = "rgba(30, 22, 15, .24)";
   context.beginPath();
-  context.ellipse(pixel.x, pixel.y + 17, drawWidth * 0.34, 4.5, 0, 0, Math.PI * 2);
+  context.ellipse(pixel.x, pixel.y + 13, drawWidth * 0.31, 5.5, 0, 0, Math.PI * 2);
   context.fill();
   context.globalAlpha = agent.state === "gone" ? 0 : 1;
   drawAtlasCell(
@@ -290,7 +292,7 @@ export function drawAgentArtwork(
     cellHeight,
     {
       x: pixel.x - drawWidth / 2,
-      y: pixel.y - drawHeight + 21 + bob,
+      y: pixel.y - drawHeight + 18 + bob,
       width: drawWidth,
       height: drawHeight,
     },
@@ -319,8 +321,8 @@ export function drawUiIcon(
 }
 
 export const STORE_ART_ATLAS_SPEC = {
-  fixtures: { width: 1536, height: 768, columns: 4, rows: 3 },
-  staff: { width: 768, height: 768, columns: 4, rows: 3 },
-  customers: { width: 640, height: 1760, columns: 4, rows: 8 },
-  icons: { width: 1024, height: 128, columns: 8, rows: 1 },
+  fixtures: { width: 576, height: 288, columns: 4, rows: 3 },
+  staff: { width: 288, height: 288, columns: 4, rows: 3 },
+  customers: { width: 256, height: 528, columns: 4, rows: 6 },
+  icons: { width: 384, height: 48, columns: 8, rows: 1 },
 } as const;

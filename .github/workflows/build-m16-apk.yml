@@ -1,0 +1,150 @@
+name: Build Milestone 16 APK
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/build-m16-apk.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/milestone-16-real-raster-store
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Ensure verified real raster assets exist
+        run: |
+          set -euxo pipefail
+          if [ ! -s public/assets/store/fixtures.webp ]; then
+            test "$(find .m16direct -maxdepth 1 -type f -name 'chunk.*' | wc -l)" -eq 8
+            cat .m16direct/chunk.00 .m16direct/chunk.01 .m16direct/chunk.02 .m16direct/chunk.03 \
+                .m16direct/chunk.04 .m16direct/chunk.05 .m16direct/chunk.06 .m16direct/chunk.07 \
+              | tr -d '\r\n\t ' > /tmp/m16-assets.zip.b64
+            base64 -d /tmp/m16-assets.zip.b64 > /tmp/m16-assets.zip
+            printf '%s  %s\n' 'e89d5133b52a9829935711b85fccfaa9ec82fcc4865b4d8942d1e581f2c24fe8' '/tmp/m16-assets.zip' | sha256sum -c -
+            mkdir -p public/assets/store
+            unzip -o /tmp/m16-assets.zip -d public/assets/store
+          fi
+          printf '%s  %s\n' 'bc54446540d1e4e289feb12923625a67814c82e617766a6900c4c7bbb4d24357' 'public/assets/store/customers.webp' | sha256sum -c -
+          printf '%s  %s\n' 'b36d35866ac3f747c2cb3c5920795c92240f836bbe674290c310bfc2ebb97bb1' 'public/assets/store/fixtures.webp' | sha256sum -c -
+          printf '%s  %s\n' 'b140d4258d363102e05a0aecb3603739eb33ebfee1afa311c3787cb0aaca88d7' 'public/assets/store/icons.webp' | sha256sum -c -
+          printf '%s  %s\n' 'cad774855f6fef7cc1ee7242f859c94740a5ea9e6a339340e885161cec91b388' 'public/assets/store/staff.webp' | sha256sum -c -
+
+      - name: Verify renderer atlas geometry
+        run: |
+          grep -F 'const FIXTURE_CELL_WIDTH = 144;' src/ui/storeArtAssets.ts
+          grep -F 'const FIXTURE_CELL_HEIGHT = 96;' src/ui/storeArtAssets.ts
+          grep -F 'const STAFF_CELL_WIDTH = 72;' src/ui/storeArtAssets.ts
+          grep -F 'const STAFF_CELL_HEIGHT = 96;' src/ui/storeArtAssets.ts
+          grep -F 'const CUSTOMER_CELL_WIDTH = 64;' src/ui/storeArtAssets.ts
+          grep -F 'const CUSTOMER_CELL_HEIGHT = 88;' src/ui/storeArtAssets.ts
+          grep -F 'const ICON_CELL_SIZE = 48;' src/ui/storeArtAssets.ts
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Typecheck, test, and build web game
+        run: |
+          npm run typecheck
+          npm test -- --run
+          npm run build
+
+      - name: Create Android project
+        env:
+          CSF_VERSION_CODE: ${{ github.run_number }}
+        run: |
+          rm -rf android
+          npx cap add android
+          npx cap sync android
+          python - <<'PY'
+          from pathlib import Path
+          import os
+          import re
+
+          manifest_path = Path('android/app/src/main/AndroidManifest.xml')
+          manifest = manifest_path.read_text()
+          if 'android:screenOrientation="landscape"' not in manifest:
+              pattern = r'(<activity\b(?=[^>]*android:name="\.MainActivity")[^>]*)(>)'
+              manifest, count = re.subn(
+                  pattern,
+                  r'\1\n            android:screenOrientation="landscape"\2',
+                  manifest,
+                  count=1,
+                  flags=re.DOTALL,
+              )
+              if count != 1:
+                  raise SystemExit('Capacitor MainActivity element not found')
+          manifest_path.write_text(manifest)
+
+          gradle_path = Path('android/app/build.gradle')
+          gradle = gradle_path.read_text()
+          gradle, count = re.subn(
+              r'versionCode\s+\d+',
+              f"versionCode {os.environ['CSF_VERSION_CODE']}",
+              gradle,
+              count=1,
+          )
+          if count != 1:
+              raise SystemExit('Android versionCode not found')
+          gradle_path.write_text(gradle)
+          PY
+
+      - name: Install fixed demo signing key
+        run: |
+          mkdir -p "$HOME/.android"
+          base64 -d .github/keys/demo-debug.keystore.b64 > "$HOME/.android/debug.keystore"
+          chmod 600 "$HOME/.android/debug.keystore"
+          printf '%s  %s\n' 'e0060b7c4614293cbc74505c5a8b9af4e8c64af651765f29524461dbdc065b06' "$HOME/.android/debug.keystore" | sha256sum -c -
+
+      - name: Build fixed-signature APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug \
+            -Pandroid.injected.signing.store.file="$HOME/.android/debug.keystore" \
+            -Pandroid.injected.signing.store.password=android \
+            -Pandroid.injected.signing.key.alias=androiddebugkey \
+            -Pandroid.injected.signing.key.password=android
+
+      - name: Verify APK signature and prepare branch artifact
+        run: |
+          set -euxo pipefail
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          "$APKSIGNER" verify --verbose --print-certs android/app/build/outputs/apk/debug/app-debug.apk | tee /tmp/apksigner.txt
+          grep -i 'a4457907f34e3b6281305fb411e0a5635fce5b4a0566270ba1b3240e64d511bf' /tmp/apksigner.txt
+          mkdir -p artifacts/android
+          cp android/app/build/outputs/apk/debug/app-debug.apk artifacts/android/convenience-store-frontier-m16-real-art.apk
+          sha256sum artifacts/android/convenience-store-frontier-m16-real-art.apk > artifacts/android/convenience-store-frontier-m16-real-art.apk.sha256
+
+      - name: Commit verified assets and APK to branch
+        run: |
+          set -euxo pipefail
+          rm -rf .m16direct .m16 .m16asset .m16r
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f public/assets/store/*.webp artifacts/android/convenience-store-frontier-m16-real-art.apk artifacts/android/convenience-store-frontier-m16-real-art.apk.sha256
+          git add -A .m16direct .m16 .m16asset .m16r || true
+          if git diff --cached --quiet; then
+            echo 'No branch artifact changes to commit.'
+          else
+            git commit -m "build: publish Milestone 16 real-art APK"
+            git push origin HEAD:agent/milestone-16-real-raster-store
+          fi
