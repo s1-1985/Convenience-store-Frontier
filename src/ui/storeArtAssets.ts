@@ -31,13 +31,13 @@ export interface FixtureArtworkPlacement {
 
 export type AgentFacing = "front" | "left" | "right" | "back";
 
-const FIXTURE_CELL_WIDTH = 192;
-const FIXTURE_CELL_HEIGHT = 128;
-const STAFF_CELL_WIDTH = 96;
-const STAFF_CELL_HEIGHT = 128;
-const CUSTOMER_CELL_WIDTH = 80;
-const CUSTOMER_CELL_HEIGHT = 110;
-const ICON_CELL_SIZE = 64;
+const FIXTURE_CELL_WIDTH = 144;
+const FIXTURE_CELL_HEIGHT = 96;
+const STAFF_CELL_WIDTH = 72;
+const STAFF_CELL_HEIGHT = 96;
+const CUSTOMER_CELL_WIDTH = 64;
+const CUSTOMER_CELL_HEIGHT = 88;
+const ICON_CELL_SIZE = 48;
 
 const FIXTURE_INDEX: Record<string, number> = {
   entrance: 0,
@@ -67,7 +67,7 @@ const FACING_COLUMN: Record<AgentFacing, number> = {
   back: 3,
 };
 
-const CUSTOMER_ROWS = [0, 1, 3, 4, 5, 7] as const;
+const CUSTOMER_ROWS = [0, 1, 2, 3, 4, 5] as const;
 
 const ASSET_URLS = {
   fixtures: "/assets/store/fixtures.webp",
@@ -321,8 +321,8 @@ export function drawUiIcon(
 }
 
 export const STORE_ART_ATLAS_SPEC = {
-  fixtures: { width: 768, height: 384, columns: 4, rows: 3 },
-  staff: { width: 384, height: 384, columns: 4, rows: 3 },
-  customers: { width: 320, height: 880, columns: 4, rows: 8 },
-  icons: { width: 512, height: 64, columns: 8, rows: 1 },
+  fixtures: { width: 576, height: 288, columns: 4, rows: 3 },
+  staff: { width: 288, height: 288, columns: 4, rows: 3 },
+  customers: { width: 256, height: 528, columns: 4, rows: 6 },
+  icons: { width: 384, height: 48, columns: 8, rows: 1 },
 } as const;
