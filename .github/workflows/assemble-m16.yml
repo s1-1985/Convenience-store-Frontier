@@ -21,17 +21,41 @@ jobs:
         with:
           ref: agent/milestone-16-real-raster-store
 
+      - name: Decode staged bundles
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import base64
+          import hashlib
+          import re
+
+          bundles = {
+              "/tmp/m16-source.zip": [Path(".m16/source.00"), Path(".m16/source.01x")],
+              "/tmp/m16-assets.zip": [Path(".m16asset/asset.00"), Path(".m16r/asset.02_03")],
+          }
+
+          for destination, chunks in bundles.items():
+              output = bytearray()
+              for chunk in chunks:
+                  raw = re.sub(r"\s+", "", chunk.read_text())
+                  invalid = re.sub(r"[A-Za-z0-9+/=]", "", raw)
+                  if invalid:
+                      raise SystemExit(f"invalid base64 characters in {chunk}: {invalid[:20]!r}")
+                  raw += "=" * ((-len(raw)) % 4)
+                  decoded = base64.b64decode(raw, validate=True)
+                  print(chunk, "encoded", len(raw), "decoded", len(decoded), hashlib.sha256(decoded).hexdigest())
+                  output.extend(decoded)
+              Path(destination).write_bytes(output)
+              print(destination, len(output), hashlib.sha256(output).hexdigest())
+          PY
+
       - name: Verify and expand real raster source bundle
         run: |
-          cat .m16/source.00 .m16/source.01x > /tmp/m16-source.zip.b64
-          base64 -d /tmp/m16-source.zip.b64 > /tmp/m16-source.zip
           unzip -t /tmp/m16-source.zip
           unzip -o /tmp/m16-source.zip -d .
 
       - name: Verify and expand real raster asset bundle
         run: |
-          cat .m16asset/asset.00 .m16r/asset.02_03 > /tmp/m16-assets.zip.b64
-          base64 -d /tmp/m16-assets.zip.b64 > /tmp/m16-assets.zip
           unzip -t /tmp/m16-assets.zip
           unzip -o /tmp/m16-assets.zip -d public
           find public/assets/store -maxdepth 1 -type f -print -exec sha256sum {} \;
