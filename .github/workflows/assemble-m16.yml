@@ -1,4 +1,4 @@
-name: Assemble Milestone 16
+name: Assemble Milestone 16 Assets
 
 on:
   workflow_dispatch:
@@ -6,7 +6,6 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/assemble-m16.yml"
-      - ".m16/**"
       - ".m16asset/**"
       - ".m16r/**"
 
@@ -14,14 +13,14 @@ permissions:
   contents: write
 
 jobs:
-  assemble:
+  assemble-assets:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: agent/milestone-16-real-raster-store
 
-      - name: Decode staged bundles
+      - name: Decode real raster asset bundle
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -29,43 +28,30 @@ jobs:
           import hashlib
           import re
 
-          bundles = {
-              "/tmp/m16-source.zip": [Path(".m16/source.00"), Path(".m16/source.01x")],
-              "/tmp/m16-assets.zip": [Path(".m16asset/asset.00"), Path(".m16r/asset.02_03")],
-          }
-
-          for destination, chunks in bundles.items():
-              output = bytearray()
-              for chunk in chunks:
-                  raw = re.sub(r"\s+", "", chunk.read_text())
-                  invalid = re.sub(r"[A-Za-z0-9+/=]", "", raw)
-                  if invalid:
-                      raise SystemExit(f"invalid base64 characters in {chunk}: {invalid[:20]!r}")
-                  raw += "=" * ((-len(raw)) % 4)
-                  decoded = base64.b64decode(raw, validate=True)
-                  print(chunk, "encoded", len(raw), "decoded", len(decoded), hashlib.sha256(decoded).hexdigest())
-                  output.extend(decoded)
-              Path(destination).write_bytes(output)
-              print(destination, len(output), hashlib.sha256(output).hexdigest())
+          output = bytearray()
+          for chunk in [Path(".m16asset/asset.00"), Path(".m16r/asset.02_03")]:
+              raw = re.sub(r"\s+", "", chunk.read_text())
+              invalid = re.sub(r"[A-Za-z0-9+/=]", "", raw)
+              print(chunk, "encoded", len(raw), "invalid", repr(invalid[:40]))
+              if invalid:
+                  raise SystemExit(f"invalid base64 characters in {chunk}: {invalid[:40]!r}")
+              raw += "=" * ((-len(raw)) % 4)
+              decoded = base64.b64decode(raw, validate=True)
+              print(chunk, "decoded", len(decoded), hashlib.sha256(decoded).hexdigest())
+              output.extend(decoded)
+          Path("/tmp/m16-assets.zip").write_bytes(output)
+          print("bundle", len(output), hashlib.sha256(output).hexdigest())
           PY
-
-      - name: Verify and expand real raster source bundle
-        run: |
-          unzip -t /tmp/m16-source.zip
-          unzip -o /tmp/m16-source.zip -d .
-
-      - name: Verify and expand real raster asset bundle
-        run: |
           unzip -t /tmp/m16-assets.zip
           unzip -o /tmp/m16-assets.zip -d public
           find public/assets/store -maxdepth 1 -type f -print -exec sha256sum {} \;
 
-      - name: Commit assembled implementation
+      - name: Commit real raster assets
         run: |
-          rm -rf .m16 .m16asset .m16r
+          rm -rf .m16asset .m16r
           rm -f .github/workflows/assemble-m16.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -m "feat: rebuild store screen with real raster assets"
+          git commit -m "feat: add real raster store atlases"
           git push origin HEAD:agent/milestone-16-real-raster-store
