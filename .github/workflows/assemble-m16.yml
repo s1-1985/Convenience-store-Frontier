@@ -6,8 +6,7 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/assemble-m16.yml"
-      - ".m16asset/**"
-      - ".m16r/**"
+      - ".m16direct/**"
 
 permissions:
   contents: write
@@ -20,38 +19,33 @@ jobs:
         with:
           ref: agent/milestone-16-real-raster-store
 
-      - name: Decode real raster asset bundle
+      - name: Verify and expand optimized raster bundle
         run: |
-          python - <<'PY'
-          from pathlib import Path
-          import base64
-          import hashlib
-          import re
-
-          output = bytearray()
-          for chunk in [Path(".m16asset/asset.00"), Path(".m16r/asset.02_03")]:
-              raw = re.sub(r"\s+", "", chunk.read_text())
-              invalid = re.sub(r"[A-Za-z0-9+/=]", "", raw)
-              print(chunk, "encoded", len(raw), "invalid", repr(invalid[:40]))
-              if invalid:
-                  raise SystemExit(f"invalid base64 characters in {chunk}: {invalid[:40]!r}")
-              raw += "=" * ((-len(raw)) % 4)
-              decoded = base64.b64decode(raw, validate=True)
-              print(chunk, "decoded", len(decoded), hashlib.sha256(decoded).hexdigest())
-              output.extend(decoded)
-          Path("/tmp/m16-assets.zip").write_bytes(output)
-          print("bundle", len(output), hashlib.sha256(output).hexdigest())
-          PY
+          cat \
+            .m16direct/chunk.00 \
+            .m16direct/chunk.01 \
+            .m16direct/chunk.02 \
+            .m16direct/chunk.03 \
+            .m16direct/chunk.04 \
+            .m16direct/chunk.05 \
+            .m16direct/chunk.06 \
+            .m16direct/chunk.07 \
+            > /tmp/m16-assets.zip.b64
+          printf '%s  %s\n' '134b33551f9b1505735e8b2ffa9047fb6aad4d6a4a585135efc16bfdbbac25ac' '/tmp/m16-assets.zip.b64' | sha256sum -c -
+          base64 -d /tmp/m16-assets.zip.b64 > /tmp/m16-assets.zip
+          printf '%s  %s\n' 'e89d5133b52a9829935711b85fccfaa9ec82fcc4865b4d8942d1e581f2c24fe8' '/tmp/m16-assets.zip' | sha256sum -c -
           unzip -t /tmp/m16-assets.zip
-          unzip -o /tmp/m16-assets.zip -d public
-          find public/assets/store -maxdepth 1 -type f -print -exec sha256sum {} \;
+          mkdir -p public/assets/store
+          unzip -o /tmp/m16-assets.zip -d public/assets/store
+          file public/assets/store/*.webp
+          sha256sum public/assets/store/*.webp
 
       - name: Commit real raster assets
         run: |
-          rm -rf .m16asset .m16r
+          rm -rf .m16 .m16asset .m16r .m16direct
           rm -f .github/workflows/assemble-m16.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -m "feat: add real raster store atlases"
+          git commit -m "feat: add optimized real raster store atlases"
           git push origin HEAD:agent/milestone-16-real-raster-store
