@@ -1,0 +1,53 @@
+name: Adjust Milestone 16 Atlas Geometry
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/adjust-m16-atlas.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  adjust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/milestone-16-real-raster-store
+
+      - name: Match renderer to optimized WebP atlas geometry
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("src/ui/storeArtAssets.ts")
+          source = path.read_text()
+          replacements = {
+              "const FIXTURE_CELL_WIDTH = 192;": "const FIXTURE_CELL_WIDTH = 144;",
+              "const FIXTURE_CELL_HEIGHT = 128;": "const FIXTURE_CELL_HEIGHT = 96;",
+              "const STAFF_CELL_WIDTH = 96;": "const STAFF_CELL_WIDTH = 72;",
+              "const STAFF_CELL_HEIGHT = 128;": "const STAFF_CELL_HEIGHT = 96;",
+              "const CUSTOMER_CELL_WIDTH = 80;": "const CUSTOMER_CELL_WIDTH = 64;",
+              "const CUSTOMER_CELL_HEIGHT = 110;": "const CUSTOMER_CELL_HEIGHT = 88;",
+              "const ICON_CELL_SIZE = 64;": "const ICON_CELL_SIZE = 48;",
+              "const CUSTOMER_ROWS = [0, 1, 3, 4, 5, 7] as const;": "const CUSTOMER_ROWS = [0, 1, 2, 3, 4, 5] as const;",
+              "fixtures: { width: 768, height: 384, columns: 4, rows: 3 },": "fixtures: { width: 576, height: 288, columns: 4, rows: 3 },",
+              "staff: { width: 384, height: 384, columns: 4, rows: 3 },": "staff: { width: 288, height: 288, columns: 4, rows: 3 },",
+              "customers: { width: 320, height: 880, columns: 4, rows: 8 },": "customers: { width: 256, height: 528, columns: 4, rows: 6 },",
+              "icons: { width: 512, height: 64, columns: 8, rows: 1 },": "icons: { width: 384, height: 48, columns: 8, rows: 1 },",
+          }
+          for old, new in replacements.items():
+              if old not in source:
+                  raise SystemExit(f"atlas geometry anchor missing: {old}")
+              source = source.replace(old, new, 1)
+          path.write_text(source)
+          PY
+          rm -f .github/workflows/adjust-m16-atlas.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: match renderer to optimized raster atlases"
+          git push origin HEAD:agent/milestone-16-real-raster-store
