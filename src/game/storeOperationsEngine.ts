@@ -67,7 +67,7 @@ export interface StoreCustomerAgent {
   patienceRemainingSeconds: number;
   regular: boolean;
   variant: number;
-  reason?: "completed" | "stockout" | "queue_abandonment" | "unreachable";
+  reason?: "completed" | "stockout" | "price" | "queue_abandonment" | "unreachable";
 }
 
 export type StaffState =
@@ -85,6 +85,8 @@ export interface StoreStaffAgent {
   x: number;
   y: number;
   task: StoreStaffTask;
+  /** Preferred work. The active task falls back to other pending work. */
+  priorityTask?: StoreStaffTask;
   state: StaffState;
   path: TilePoint[];
   targetCategory?: StoreCategoryId;
@@ -105,11 +107,26 @@ export interface StoreDayKpis {
   unitsSold: number;
   revenue: number;
   stockoutEncounters: number;
+  priceRefusals: number;
   noPurchaseExits: number;
   queueAbandonments: number;
   maximumQueueLength: number;
   replenishedUnits: number;
   litterCleaned: number;
+  regularVisits: number;
+  regularTransactions: number;
+}
+
+export interface StoreDailyResult {
+  day: number;
+  enteredCustomers: number;
+  transactions: number;
+  revenue: number;
+  stockoutEncounters: number;
+  queueAbandonments: number;
+  maximumQueueLength: number;
+  serviceTrust: number;
+  regularTransactions: number;
 }
 
 export interface StoreStaffAssignments {
@@ -120,6 +137,7 @@ export interface StoreStaffAssignments {
 
 export interface StoreEngineContext {
   isOpen: boolean;
+  hour: number;
   arrivalRatePerMinute: number;
   categoryWeights: Record<StoreCategoryId, number>;
   requestedStaffCount: number;
@@ -136,6 +154,9 @@ export interface StoreOperationsSnapshot {
   kpis: StoreDayKpis;
   assignments: StoreStaffAssignments;
   checkoutProgressSeconds: number;
+  merchandisingFocus?: StoreCategoryId;
+  dailyHistory: StoreDailyResult[];
+  serviceTrust: number;
 }
 
 export interface SerializedStoreOperations extends StoreOperationsSnapshot {
@@ -144,12 +165,24 @@ export interface SerializedStoreOperations extends StoreOperationsSnapshot {
   nextCustomerNumber: number;
   nextLitterNumber: number;
   spawnAccumulator: number;
+  orderingPolicy?: StoreOrderingPolicy;
+  deliveryPolicy?: StoreDeliveryPolicy;
+  secondDeliveryCompletedDay?: number;
 }
+
+export type StoreOrderingPolicy = "sell_through" | "standard" | "stockout_prevention";
+export type StoreDeliveryPolicy =
+  | "once_daily"
+  | "ready_to_eat_twice_daily"
+  | "all_categories_twice_daily";
 
 export interface StoreOperationsEngine {
   advance(deltaSeconds: number, context: StoreEngineContext): void;
   beginDay(day: number): void;
   setStaffAssignments(assignments: StoreStaffAssignments): void;
+  setSupplyPolicy(ordering: StoreOrderingPolicy, delivery: StoreDeliveryPolicy): void;
+  setMerchandisingFocus(category?: StoreCategoryId): void;
+  setCategoryPrice(category: StoreCategoryId, price: number): void;
   getSnapshot(): StoreOperationsSnapshot;
   getLayout(): StoreLayout;
   serialize(): SerializedStoreOperations;
@@ -174,6 +207,14 @@ const CATEGORY_DEFAULTS: Record<StoreCategoryId, Omit<ShelfInventoryState, "cate
   daily_goods: { shelfUnits: 12, shelfCapacity: 16, backroomUnits: 30, price: 420 },
   magazines: { shelfUnits: 9, shelfCapacity: 12, backroomUnits: 18, price: 490 },
 };
+
+export function categoryPriceRange(category: StoreCategoryId): { min: number; max: number } {
+  const basePrice = CATEGORY_DEFAULTS[category].price;
+  return {
+    min: Math.ceil(basePrice * 0.7 / 10) * 10,
+    max: Math.floor(basePrice * 1.5 / 10) * 10,
+  };
+}
 
 const CUSTOMER_MOVE_SPEED = 3.2;
 const STAFF_MOVE_SPEED = 3.8;
@@ -403,11 +444,14 @@ function emptyKpis(): StoreDayKpis {
     unitsSold: 0,
     revenue: 0,
     stockoutEncounters: 0,
+    priceRefusals: 0,
     noPurchaseExits: 0,
     queueAbandonments: 0,
     maximumQueueLength: 0,
     replenishedUnits: 0,
     litterCleaned: 0,
+    regularVisits: 0,
+    regularTransactions: 0,
   };
 }
 
@@ -520,10 +564,20 @@ export function createStoreOperationsEngine(
   ) as Record<StoreCategoryId, ShelfInventoryState>);
   let queueCustomerIds = [...(restored?.queueCustomerIds ?? [])];
   let litter = restored?.litter.map((item) => ({ ...item })) ?? [];
-  let kpis = { ...(restored?.kpis ?? emptyKpis()) };
+  let kpis = { ...emptyKpis(), ...(restored?.kpis ?? {}) };
   let assignments = { ...(restored?.assignments ?? { register: 1, replenishment: 1, cleaning: 0 }) };
   let checkoutProgressSeconds = restored?.checkoutProgressSeconds ?? 0;
   let lastRequestedStaffCount = Math.max(1, staff.length || 2);
+  let orderingPolicy: StoreOrderingPolicy = restored?.orderingPolicy ?? "standard";
+  let deliveryPolicy: StoreDeliveryPolicy = restored?.deliveryPolicy ?? "once_daily";
+  let secondDeliveryCompletedDay = restored?.secondDeliveryCompletedDay ?? 0;
+  let merchandisingFocus = restored?.merchandisingFocus;
+  let dailyHistory = restored?.dailyHistory?.map((result) => ({
+    ...result,
+    serviceTrust: result.serviceTrust ?? restored.serviceTrust ?? 0.35,
+    regularTransactions: result.regularTransactions ?? 0,
+  })) ?? [];
+  let serviceTrust = clamp(restored?.serviceTrust ?? 0.35, 0, 1);
 
   function random(): number {
     let value = rngState | 0;
@@ -550,8 +604,13 @@ export function createStoreOperationsEngine(
     const count = random() < 0.58 ? 1 : random() < 0.82 ? 2 : 3;
     const result: StoreCategoryId[] = [];
     const excluded = new Set<StoreCategoryId>();
+    const priceAdjustedWeights = Object.fromEntries(CATEGORY_IDS.map((categoryId) => {
+      const basePrice = CATEGORY_DEFAULTS[categoryId].price;
+      const relativePrice = inventories[categoryId].price / basePrice;
+      return [categoryId, weights[categoryId] * Math.pow(relativePrice, -1.35)];
+    })) as Record<StoreCategoryId, number>;
     for (let index = 0; index < count; index += 1) {
-      const category = weightedCategory(weights, excluded);
+      const category = weightedCategory(priceAdjustedWeights, excluded);
       if (!category) break;
       result.push(category);
       excluded.add(category);
@@ -598,8 +657,8 @@ export function createStoreOperationsEngine(
       basketUnits: 0,
       basketValue: 0,
       browseRemainingSeconds: 0,
-      patienceRemainingSeconds: 13 + random() * 16,
-      regular: random() < 0.22,
+      patienceRemainingSeconds: 13 + random() * 16 + serviceTrust * 6,
+      regular: random() < 0.08 + serviceTrust * 0.45,
       variant: Math.floor(random() * 8),
     };
     nextCustomerNumber += 1;
@@ -609,6 +668,7 @@ export function createStoreOperationsEngine(
     }
     customers.push(customer);
     kpis.enteredCustomers += 1;
+    if (customer.regular) kpis.regularVisits += 1;
   }
 
   function queuePosition(customerId: string): TilePoint {
@@ -636,6 +696,24 @@ export function createStoreOperationsEngine(
     if (!customer.attemptedCategories.includes(categoryId)) customer.attemptedCategories.push(categoryId);
     const inventory = inventories[categoryId];
     if (inventory.shelfUnits > 0) {
+      const basePrice = CATEGORY_DEFAULTS[categoryId].price;
+      const relativePrice = inventory.price / basePrice;
+      const purchaseChance = clamp(
+        1.08 - Math.max(0, relativePrice - 1) * 0.9 + (customer.regular ? 0.08 : 0),
+        0.45,
+        1,
+      );
+      if (random() > purchaseChance) {
+        kpis.priceRefusals += 1;
+        const nextCategory = customer.wishList.shift();
+        if (nextCategory && routeCustomerToCategory(customer, nextCategory)) return;
+        if (customer.basketUnits > 0) routeCustomerToQueue(customer);
+        else {
+          kpis.noPurchaseExits += 1;
+          routeCustomerToExit(customer, "price");
+        }
+        return;
+      }
       const desiredUnits = random() < 0.18 ? 2 : 1;
       const purchasedUnits = Math.min(desiredUnits, inventory.shelfUnits);
       inventory.shelfUnits -= purchasedUnits;
@@ -720,6 +798,7 @@ export function createStoreOperationsEngine(
         x: layout.backroomTile.x,
         y: layout.backroomTile.y,
         task: "register",
+        priorityTask: "register",
         state: "idle",
         path: [],
         carryUnits: 0,
@@ -734,9 +813,10 @@ export function createStoreOperationsEngine(
       for (let count = 0; count < assignments[task]; count += 1) desiredTasks.push(task);
     }
     staff.forEach((member, index) => {
-      const nextTask = desiredTasks[index] ?? "register";
-      if (member.task !== nextTask) {
-        member.task = nextTask;
+      const nextPriority = desiredTasks[index] ?? "register";
+      if (member.priorityTask !== nextPriority) {
+        member.priorityTask = nextPriority;
+        member.task = nextPriority;
         member.state = "idle";
         member.path = [];
         member.targetCategory = undefined;
@@ -758,8 +838,10 @@ export function createStoreOperationsEngine(
     return CATEGORY_IDS
       .filter((categoryId) => inventories[categoryId].backroomUnits > 0)
       .sort((left, right) => {
-        const leftRatio = inventories[left].shelfUnits / inventories[left].shelfCapacity;
-        const rightRatio = inventories[right].shelfUnits / inventories[right].shelfCapacity;
+        const leftRatio = inventories[left].shelfUnits / inventories[left].shelfCapacity
+          - (left === merchandisingFocus ? 0.16 : 0);
+        const rightRatio = inventories[right].shelfUnits / inventories[right].shelfCapacity
+          - (right === merchandisingFocus ? 0.16 : 0);
         return leftRatio - rightRatio;
       })
       .find((categoryId) => inventories[categoryId].shelfUnits < inventories[categoryId].shelfCapacity * 0.72);
@@ -881,6 +963,7 @@ export function createStoreOperationsEngine(
     checkoutProgressSeconds = 0;
     queueCustomerIds.shift();
     kpis.transactions += 1;
+    if (customer.regular) kpis.regularTransactions += 1;
     kpis.unitsSold += customer.basketUnits;
     kpis.revenue += customer.basketValue;
     if (random() < 0.14 && litter.length < 8) {
@@ -896,21 +979,61 @@ export function createStoreOperationsEngine(
   }
 
   function updateStaff(deltaSeconds: number): void {
-    for (const member of staff) {
+    const lowShelfCount = CATEGORY_IDS.filter((categoryId) => {
+      const inventory = inventories[categoryId];
+      return inventory.backroomUnits > 0 && inventory.shelfUnits < inventory.shelfCapacity * 0.72;
+    }).length;
+    const plannedTasks = planStoreStaffTasks(
+      staff.map((member) => member.priorityTask ?? member.task),
+      {
+        register: queueCustomerIds.length > 0 ? Math.max(1, queueCustomerIds.length / 3) : 0,
+        replenishment: lowShelfCount / 2,
+        cleaning: litter.length / 2,
+      },
+    );
+    staff.forEach((member, index) => {
+      const canChangeTask = member.state === "idle" || member.state === "register_ready";
+      if (canChangeTask) {
+        const nextTask = plannedTasks[index] ?? member.priorityTask ?? member.task;
+        if (nextTask !== member.task) {
+          member.task = nextTask;
+          member.state = "idle";
+          member.path = [];
+          member.targetCategory = undefined;
+          member.carryUnits = 0;
+          member.workRemainingSeconds = 0;
+        }
+      }
       if (member.task === "register") updateRegisterStaff(member, deltaSeconds);
       else if (member.task === "replenishment") updateReplenishmentStaff(member, deltaSeconds);
       else updateCleaningStaff(member, deltaSeconds);
+    });
+  }
+
+  function deliverStock(categories: readonly StoreCategoryId[], quantityMultiplier: number): void {
+    const orderingMultiplier = orderingPolicy === "sell_through"
+      ? 0.82
+      : orderingPolicy === "stockout_prevention"
+        ? 1.42
+        : 1.08;
+    for (const categoryId of categories) {
+      const inventory = inventories[categoryId];
+      const targetBackroom = Math.round(inventory.shelfCapacity * 2.1 * orderingMultiplier);
+      if (inventory.backroomUnits < targetBackroom) {
+        inventory.backroomUnits += Math.round(
+          inventory.shelfCapacity * orderingMultiplier * quantityMultiplier,
+        );
+      }
     }
   }
 
-  function deliverDailyStock(): void {
-    for (const categoryId of CATEGORY_IDS) {
-      const inventory = inventories[categoryId];
-      const targetBackroom = Math.round(inventory.shelfCapacity * 2.1);
-      if (inventory.backroomUnits < targetBackroom) {
-        inventory.backroomUnits += Math.round(inventory.shelfCapacity * 1.15);
-      }
-    }
+  function deliverMorningStock(): void {
+    deliverStock(CATEGORY_IDS, 1);
+  }
+
+  function deliverSecondStock(): void {
+    if (deliveryPolicy === "ready_to_eat_twice_daily") deliverStock(["ready_meal"], 0.72);
+    if (deliveryPolicy === "all_categories_twice_daily") deliverStock(CATEGORY_IDS, 0.58);
   }
 
   return {
@@ -919,6 +1042,15 @@ export function createStoreOperationsEngine(
       if (safeDelta <= 0) return;
       elapsedSeconds += safeDelta;
       syncStaffCount(context.requestedStaffCount);
+
+      if (
+        context.hour >= 13 &&
+        deliveryPolicy !== "once_daily" &&
+        secondDeliveryCompletedDay !== day
+      ) {
+        deliverSecondStock();
+        secondDeliveryCompletedDay = day;
+      }
 
       if (context.isOpen) {
         spawnAccumulator += Math.max(0, context.arrivalRatePerMinute) * safeDelta / 60;
@@ -935,16 +1067,50 @@ export function createStoreOperationsEngine(
 
     beginDay(nextDay: number): void {
       if (nextDay === day) return;
+      if (kpis.enteredCustomers > 0 || kpis.revenue > 0) {
+        const entered = Math.max(1, kpis.enteredCustomers);
+        const conversion = clamp(kpis.transactions / entered, 0, 1);
+        const availability = clamp(1 - kpis.stockoutEncounters / entered, 0, 1);
+        const queueService = clamp(1 - kpis.queueAbandonments / entered, 0, 1);
+        const dayReliability = conversion * 0.4 + availability * 0.35 + queueService * 0.25;
+        serviceTrust = clamp(serviceTrust + (dayReliability - serviceTrust) * 0.22, 0, 1);
+        dailyHistory.push({
+          day,
+          enteredCustomers: kpis.enteredCustomers,
+          transactions: kpis.transactions,
+          revenue: kpis.revenue,
+          stockoutEncounters: kpis.stockoutEncounters,
+          queueAbandonments: kpis.queueAbandonments,
+          maximumQueueLength: kpis.maximumQueueLength,
+          serviceTrust,
+          regularTransactions: kpis.regularTransactions,
+        });
+        dailyHistory = dailyHistory.slice(-14);
+      }
       day = nextDay;
       kpis = emptyKpis();
       spawnAccumulator = 0;
       checkoutProgressSeconds = 0;
-      deliverDailyStock();
+      deliverMorningStock();
     },
 
     setStaffAssignments(nextAssignments: StoreStaffAssignments): void {
       assignments = normalizeAssignments(nextAssignments, lastRequestedStaffCount);
       syncStaffCount(lastRequestedStaffCount);
+    },
+
+    setSupplyPolicy(nextOrdering: StoreOrderingPolicy, nextDelivery: StoreDeliveryPolicy): void {
+      orderingPolicy = nextOrdering;
+      deliveryPolicy = nextDelivery;
+    },
+
+    setMerchandisingFocus(category?: StoreCategoryId): void {
+      merchandisingFocus = category;
+    },
+
+    setCategoryPrice(category: StoreCategoryId, nextPrice: number): void {
+      const range = categoryPriceRange(category);
+      inventories[category].price = clamp(Math.round(nextPrice / 10) * 10, range.min, range.max);
     },
 
     getSnapshot(): StoreOperationsSnapshot {
@@ -959,6 +1125,9 @@ export function createStoreOperationsEngine(
         kpis: { ...kpis },
         assignments: { ...assignments },
         checkoutProgressSeconds,
+        merchandisingFocus,
+        dailyHistory: dailyHistory.map((result) => ({ ...result })),
+        serviceTrust,
       };
     },
 
@@ -987,6 +1156,10 @@ export function createStoreOperationsEngine(
         nextCustomerNumber,
         nextLitterNumber,
         spawnAccumulator,
+        orderingPolicy,
+        deliveryPolicy,
+        merchandisingFocus,
+        secondDeliveryCompletedDay,
       };
     },
   };
@@ -1012,3 +1185,4 @@ export function defaultCategoryWeightsForHour(hour: number): Record<StoreCategor
   }
   return { drinks: 1.4, dessert: 0.7, ready_meal: 1.8, snacks: 1.0, instant: 1.1, daily_goods: 1.2, magazines: 0.6 };
 }
+import { planStoreStaffTasks } from "./storeTaskScheduler.js";
