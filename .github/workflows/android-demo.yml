@@ -2,6 +2,18 @@ name: Android Demo APK
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "data/**"
+      - "public/**"
+      - "index.html"
+      - "package.json"
+      - "package-lock.json"
+      - "capacitor.config.ts"
+      - ".github/keys/demo-debug.keystore.b64"
+      - ".github/workflows/android-demo.yml"
   pull_request:
     branches: [main]
     paths:
@@ -13,6 +25,9 @@ on:
       - "capacitor.config.ts"
       - ".github/keys/demo-debug.keystore.b64"
       - ".github/workflows/android-demo.yml"
+
+permissions:
+  contents: write
 
 jobs:
   build-apk:
@@ -116,3 +131,15 @@ jobs:
             convenience-store-frontier-demo-fixed.apk.sha256
           if-no-files-found: error
           retention-days: 30
+
+      - name: Publish stable APK download
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view demo-latest >/dev/null 2>&1 || \
+            gh release create demo-latest --title "Android Demo (latest)" --notes "Latest fixed-signature Android demo build."
+          gh release upload demo-latest \
+            convenience-store-frontier-demo-fixed.apk \
+            convenience-store-frontier-demo-fixed.apk.sha256 \
+            --clobber
