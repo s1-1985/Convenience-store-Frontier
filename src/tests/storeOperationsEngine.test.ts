@@ -56,7 +56,7 @@ describe("individual store operations engine", () => {
     expect(after.kpis.revenue).toBeGreaterThan(0);
   });
 
-  it("creates a real queue and abandonment when no staff member is assigned to register", () => {
+  it("creates queue pressure before non-register priorities fall back to checkout", () => {
     const engine = createStoreOperationsEngine(2026);
     engine.setStaffAssignments({ register: 0, replenishment: 2, cleaning: 0 });
 
@@ -65,7 +65,8 @@ describe("individual store operations engine", () => {
 
     expect(snapshot.kpis.maximumQueueLength).toBeGreaterThan(0);
     expect(snapshot.kpis.queueAbandonments).toBeGreaterThan(0);
-    expect(snapshot.kpis.transactions).toBe(0);
+    expect(snapshot.kpis.transactions).toBeGreaterThan(0);
+    expect(snapshot.staff.every((member) => member.priorityTask === "replenishment")).toBe(true);
   });
 
   it("moves stock from the backroom to shelves when a replenisher is assigned", () => {
@@ -110,6 +111,16 @@ describe("individual store operations engine", () => {
     expect(after.queueCustomerIds.length).toBeLessThan(queueBefore);
   });
 
+  it("treats assignments as priorities and falls back to pending register work", () => {
+    const engine = createStoreOperationsEngine(312);
+    engine.setStaffAssignments({ register: 0, replenishment: 2, cleaning: 0 });
+    run(engine, 100, context({ requestedStaffCount: 2, arrivalRatePerMinute: 16 }));
+    const snapshot = engine.getSnapshot();
+
+    expect(snapshot.staff.every((member) => member.priorityTask === "replenishment")).toBe(true);
+    expect(snapshot.kpis.transactions).toBeGreaterThan(0);
+  });
+
   it("restores the exact persistent store state and remains deterministic", () => {
     const first = createStoreOperationsEngine(555);
     run(first, 75);
@@ -120,5 +131,78 @@ describe("individual store operations engine", () => {
     run(first, 40);
     run(restored, 40);
     expect(restored.getSnapshot()).toEqual(first.getSnapshot());
+  });
+
+  it("delivers visibly different stock from the selected ordering and delivery policies", () => {
+    const leanSource = createStoreOperationsEngine(90).serialize();
+    const safeSource = createStoreOperationsEngine(90).serialize();
+    for (const inventory of Object.values(leanSource.inventories)) inventory.backroomUnits = 0;
+    for (const inventory of Object.values(safeSource.inventories)) inventory.backroomUnits = 0;
+    const lean = restoreStoreOperationsEngine(leanSource);
+    const safe = restoreStoreOperationsEngine(safeSource);
+
+    lean.setSupplyPolicy("sell_through", "once_daily");
+    safe.setSupplyPolicy("stockout_prevention", "all_categories_twice_daily");
+    lean.beginDay(2);
+    safe.beginDay(2);
+
+    const leanStock = Object.values(lean.getSnapshot().inventories).reduce(
+      (sum, inventory) => sum + inventory.backroomUnits,
+      0,
+    );
+    const safeStock = Object.values(safe.getSnapshot().inventories).reduce(
+      (sum, inventory) => sum + inventory.backroomUnits,
+      0,
+    );
+    expect(safeStock).toBeGreaterThan(leanStock);
+  });
+
+  it("persists the selected merchandising focus", () => {
+    const engine = createStoreOperationsEngine(1977);
+    engine.setMerchandisingFocus("ready_meal");
+
+    const restored = restoreStoreOperationsEngine(engine.serialize());
+    expect(restored.getSnapshot().merchandisingFocus).toBe("ready_meal");
+  });
+
+  it("keeps a bounded daily operating history across save and restore", () => {
+    const engine = createStoreOperationsEngine(204);
+    run(engine, 70, context({ requestedStaffCount: 3, arrivalRatePerMinute: 14 }));
+    engine.beginDay(2);
+
+    const history = engine.getSnapshot().dailyHistory;
+    expect(history).toHaveLength(1);
+    expect(history[0]?.day).toBe(1);
+    expect(history[0]?.enteredCustomers).toBeGreaterThan(0);
+    expect(restoreStoreOperationsEngine(engine.serialize()).getSnapshot().dailyHistory).toEqual(history);
+  });
+
+  it("builds persistent service trust from reliable daily operations", () => {
+    const source = createStoreOperationsEngine(108).serialize();
+    source.kpis.enteredCustomers = 20;
+    source.kpis.transactions = 19;
+    source.kpis.stockoutEncounters = 0;
+    source.kpis.queueAbandonments = 0;
+    const engine = restoreStoreOperationsEngine(source);
+    const before = engine.getSnapshot().serviceTrust;
+
+    engine.beginDay(2);
+    const after = engine.getSnapshot();
+    expect(after.serviceTrust).toBeGreaterThan(before);
+    expect(after.dailyHistory[0]?.serviceTrust).toBe(after.serviceTrust);
+    expect(restoreStoreOperationsEngine(engine.serialize()).getSnapshot().serviceTrust).toBe(after.serviceTrust);
+  });
+
+  it("tracks regular visits and successful regular checkouts", () => {
+    const source = createStoreOperationsEngine(809).serialize();
+    source.serviceTrust = 1;
+    const engine = restoreStoreOperationsEngine(source);
+    engine.setStaffAssignments({ register: 3, replenishment: 0, cleaning: 0 });
+
+    run(engine, 180, context({ requestedStaffCount: 3, arrivalRatePerMinute: 18 }));
+    const snapshot = engine.getSnapshot();
+    expect(snapshot.kpis.regularVisits).toBeGreaterThan(0);
+    expect(snapshot.kpis.regularTransactions).toBeGreaterThan(0);
+    expect(snapshot.kpis.regularTransactions).toBeLessThanOrEqual(snapshot.kpis.regularVisits);
   });
 });
