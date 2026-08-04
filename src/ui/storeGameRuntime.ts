@@ -10,11 +10,22 @@ import {
   type StoreLayout,
   type StoreOperationsEngine,
   type StoreOperationsSnapshot,
+  type StoreOrderingPolicy,
+  type StoreDeliveryPolicy,
   type StoreStaffAssignments,
   type StoreStaffAgent,
   type StoreStaffTask,
   type TilePoint,
 } from "../game/storeOperationsEngine.js";
+import { priorityStoreObjectives, type StoreObjectiveStatus } from "../game/storeObjectives.js";
+import {
+  assignmentsForPreset,
+  recommendStaffing,
+  type StoreStaffPreset,
+} from "../game/storeStaffing.js";
+import { recommendSupplyPolicy } from "../game/storeSupplyAdvisor.js";
+import { summarizeStorePerformance } from "../game/storePerformance.js";
+import { detectStoreIncidents } from "../game/storeIncidents.js";
 import {
   createStoreLayoutEditorUi,
   loadSavedStoreLayout,
@@ -34,6 +45,7 @@ const LOGICAL_WIDTH = 1080;
 const LOGICAL_HEIGHT = 500;
 const STORE_SAVE_KEY = "convenience-store-frontier.store-operations.v1";
 let storeArtAssets: StoreArtAssets | undefined;
+let lastAutoStoppedIncident = "";
 
 interface StoreViewGeometry {
   gridX: number;
@@ -131,13 +143,22 @@ function arrivalRatePerMinute(): number {
   return base * pressure;
 }
 
-function engineContext(): StoreEngineContext {
+function engineContext(focus?: StoreCategoryId): StoreEngineContext {
+  const weights = defaultCategoryWeightsForHour(currentHour());
+  if (focus) weights[focus] *= 1.35;
   return {
     isOpen: isStoreOpen(),
+    hour: currentHour() + currentMinute() / 60,
     arrivalRatePerMinute: arrivalRatePerMinute(),
-    categoryWeights: defaultCategoryWeightsForHour(currentHour()),
+    categoryWeights: weights,
     requestedStaffCount: currentStaffing(),
   };
+}
+
+function syncSupplyPolicy(engine: StoreOperationsEngine): void {
+  const ordering = optional<HTMLSelectElement>("ordering-policy-select")?.value ?? "standard";
+  const delivery = optional<HTMLSelectElement>("delivery-policy-select")?.value ?? "once_daily";
+  engine.setSupplyPolicy(ordering as StoreOrderingPolicy, delivery as StoreDeliveryPolicy);
 }
 
 function tilePixel(tile: TilePoint, geometry: StoreViewGeometry): { x: number; y: number } {
@@ -436,14 +457,16 @@ function drawStatusCard(
 
 function drawHud(context: CanvasRenderingContext2D, snapshot: StoreOperationsSnapshot): void {
   rect(context, 0, 0, LOGICAL_WIDTH, 42, "#06192d", "#e4ad3e", 2);
-  drawStatusCard(context, 8, 94, "営業日", `${currentDay()}日目`);
-  drawStatusCard(context, 108, 113, "時刻", optional("time-label")?.textContent ?? "06:00", 0);
-  drawStatusCard(context, 227, 136, "天気", optional("weather-label")?.textContent ?? "晴れ", 7);
-  drawStatusCard(context, 369, 232, "所持金", optional("cash-label")?.textContent ?? "—", 6);
-  drawStatusCard(context, 607, 158, "店内売上", `¥${snapshot.kpis.revenue.toLocaleString("ja-JP")}`, 5);
+  rect(context, 7, 4, 92, 34, "#f3ead0", "#e4ad3e", 2);
+  text(context, "コンビニ", 53, 13, 8, "center", "#126154");
+  text(context, "FRONTIER 24", 53, 27, 12, "center", "#d64b27");
+  drawStatusCard(context, 105, 94, "営業日", `${currentDay()}日目`);
+  drawStatusCard(context, 205, 113, "時刻", optional("time-label")?.textContent ?? "06:00", 0);
+  drawStatusCard(context, 324, 136, "天気", optional("weather-label")?.textContent ?? "晴れ", 7);
+  drawStatusCard(context, 466, 232, "所持金", optional("cash-label")?.textContent ?? "—", 6);
+  drawStatusCard(context, 704, 174, "店内売上", `¥${snapshot.kpis.revenue.toLocaleString("ja-JP")}`, 5);
   const status = isStoreOpen() ? (isPlaying() ? "営業中" : "一時停止") : "営業時間外";
-  drawStatusCard(context, 771, 145, "営業状態", status, undefined, isStoreOpen() ? "#fff4cf" : "#ffb5a8");
-  drawStatusCard(context, 922, 150, "来店／会計", `${snapshot.kpis.enteredCustomers}／${snapshot.kpis.transactions}人`, 4);
+  drawStatusCard(context, 884, 188, "営業状態", status, undefined, isStoreOpen() ? "#fff4cf" : "#ffb5a8");
 }
 
 function drawInventoryBar(
@@ -471,17 +494,20 @@ function drawFooter(context: CanvasRenderingContext2D, snapshot: StoreOperations
     drawInventoryBar(context, 14 + index * 118, y + 15, 105, categoryId, snapshot);
   });
 
-  const kpiX = 850;
-  const rows: Array<[string, string, string?]> = [
-    ["行列", `${snapshot.queueCustomerIds.length}人`, snapshot.queueCustomerIds.length >= 5 ? "#ff9d8e" : undefined],
-    ["欠品遭遇", `${snapshot.kpis.stockoutEncounters}件`, snapshot.kpis.stockoutEncounters > 0 ? "#ffbe78" : undefined],
-    ["離脱", `${snapshot.kpis.noPurchaseExits + snapshot.kpis.queueAbandonments}人`],
-  ];
-  rows.forEach(([label, value, color], index) => {
-    const x = kpiX + (index % 3) * 75;
-    rect(context, x, y + 11, 68, 48, "#0d3154", "#315e7d", 1);
-    text(context, label, x + 34, y + 24, 8, "center", "#b8d5e8");
-    text(context, value, x + 34, y + 43, 12, "center", color ?? "#fff4cf");
+  const objectiveX = 842;
+  text(context, "本日の経営目標", objectiveX, y + 10, 9, "left", "#f3cf6c");
+  const statusColor: Record<StoreObjectiveStatus, string> = {
+    active: "#d5962f",
+    completed: "#5cac67",
+    at_risk: "#d84b3f",
+  };
+  priorityStoreObjectives(snapshot).forEach((objective, index) => {
+    const rowY = y + 20 + index * 20;
+    const color = statusColor[objective.status];
+    rect(context, objectiveX, rowY, 224, 17, "#0d3154", color, 1);
+    text(context, objective.status === "completed" ? "✓" : objective.status === "at_risk" ? "!" : "•", objectiveX + 8, rowY + 9, 10, "center", color);
+    text(context, objective.label, objectiveX + 17, rowY + 9, 8, "left", "#dceaf0");
+    text(context, objective.progress, objectiveX + 218, rowY + 9, 8, "right", color);
   });
 }
 
@@ -511,6 +537,7 @@ function buildShell(): HTMLElement {
     <section class="store-game-stage" aria-label="コンビニ店内営業">
       <canvas id="store-game-canvas" width="1080" height="500"></canvas>
       <button type="button" class="store-game-menu" data-game-action="detail" aria-label="詳細設定">詳細</button>
+      <div class="live-incident" data-live-incident hidden><strong></strong><span></span></div>
       <div class="orientation-message">端末を横向きにしてください</div>
     </section>
     <nav class="store-game-nav" aria-label="主要メニュー">
@@ -522,9 +549,86 @@ function buildShell(): HTMLElement {
       <button type="button" data-game-action="info"><span class="store-nav-icon store-nav-icon--info" aria-hidden="true"></span><b>情報</b></button>
     </nav>
     <section class="store-staff-panel" id="store-staff-panel" hidden>
-      <header><strong>店員配置</strong><button type="button" data-close-staff>閉じる</button></header>
-      <p>営業中でも担当を変更できます。合計人数は現在のシフトと同じです。</p>
+      <header><strong>店員の作業優先順位</strong><button type="button" data-close-staff>閉じる</button></header>
+      <p>優先作業がなければ、行列・補充・清掃のうち発生している仕事を自動で手伝います。</p>
+      <div class="staff-recommendation">
+        <strong data-staff-recommendation-label>おすすめ</strong>
+        <span data-staff-recommendation-reason></span>
+        <button type="button" data-apply-recommendation>おすすめ優先度を適用</button>
+      </div>
+      <div class="staff-presets" aria-label="店員作業優先度プリセット">
+        <button type="button" data-staff-preset="balanced">バランス</button>
+        <button type="button" data-staff-preset="register">レジ優先</button>
+        <button type="button" data-staff-preset="replenishment">補充優先</button>
+        <button type="button" data-staff-preset="cleaning">清掃優先</button>
+      </div>
       <div class="staff-assignment-grid"></div>
+    </section>
+    <section class="store-supply-panel" id="store-supply-panel" hidden>
+      <header><strong>発注・納品方針</strong><button type="button" data-close-supply>閉じる</button></header>
+      <div class="supply-recommendation">
+        <strong data-supply-recommendation-label>おすすめ</strong>
+        <span data-supply-recommendation-reason></span>
+        <button type="button" data-apply-supply-recommendation>おすすめを適用</button>
+      </div>
+      <h3>発注量</h3>
+      <div class="supply-presets">
+        <button type="button" data-ordering-preset="sell_through">売り切り重視<small>納品を抑える</small></button>
+        <button type="button" data-ordering-preset="standard">標準<small>需要相当</small></button>
+        <button type="button" data-ordering-preset="stockout_prevention">欠品防止<small>多めに確保</small></button>
+      </div>
+      <h3>納品回数</h3>
+      <div class="supply-presets">
+        <button type="button" data-delivery-preset="once_daily">一日一回</button>
+        <button type="button" data-delivery-preset="ready_to_eat_twice_daily">弁当のみ二回</button>
+        <button type="button" data-delivery-preset="all_categories_twice_daily">全商品二回</button>
+      </div>
+      <p class="supply-message" data-supply-message>変更は翌日の納品から店内在庫へ反映されます。</p>
+    </section>
+    <section class="store-product-panel" id="store-product-panel" hidden>
+      <header><strong>重点商品カテゴリー</strong><button type="button" data-close-product>閉じる</button></header>
+      <p>重点カテゴリーはお客の注目を集め、補充時にも少し優先されます。</p>
+      <div class="product-focus-grid"></div>
+      <button type="button" class="product-detail-button" data-open-product-detail>売場面積を詳しく設定</button>
+    </section>
+    <section class="store-info-panel" id="store-info-panel" hidden>
+      <header><strong>店舗情報</strong><button type="button" data-close-info>閉じる</button></header>
+      <div class="performance-summary">
+        <strong class="performance-grade" data-performance-grade>B</strong>
+        <div><b data-performance-headline>営業準備中</b><span data-performance-action></span></div>
+      </div>
+      <div class="performance-grid"></div>
+      <div class="daily-history" data-daily-history></div>
+      <button type="button" class="info-detail-button" data-open-info-detail>日報・地域・競合レポートを見る</button>
+    </section>
+    <section class="store-time-panel" id="store-time-panel" hidden>
+      <header><strong>時間操作</strong><button type="button" data-close-time>閉じる</button></header>
+      <div class="time-now"><span>現在</span><strong data-time-now>1日目 06:00</strong></div>
+      <div class="time-command-grid">
+        <button type="button" data-time-command="play">▶ 再生／停止</button>
+        <button type="button" data-time-command="slot">＋15分</button>
+        <button type="button" data-time-command="day">翌日まで</button>
+      </div>
+      <h3>進行速度</h3>
+      <div class="time-speed-grid">
+        <button type="button" data-time-speed="1">1倍</button>
+        <button type="button" data-time-speed="4">4倍</button>
+        <button type="button" data-time-speed="20">20倍</button>
+      </div>
+      <label class="time-auto-stop"><input type="checkbox" data-time-auto-stop />重大問題を検出したら自動停止</label>
+    </section>
+    <section class="store-policy-panel" id="store-policy-panel" hidden>
+      <header><strong>店舗運営</strong><button type="button" data-close-store-policy>閉じる</button></header>
+      <div class="store-live-status"><span data-store-live-status>営業準備中</span><strong data-store-customer-count>店内 0人</strong></div>
+      <h3>営業時間</h3>
+      <div class="opening-hour-presets">
+        <button type="button" data-opening-hours="8,20">8〜20時<small>低コスト</small></button>
+        <button type="button" data-opening-hours="7,21">7〜21時<small>標準</small></button>
+        <button type="button" data-opening-hours="7,23">7〜23時<small>長時間</small></button>
+        <button type="button" data-opening-hours="6,24">6〜24時<small>最大営業</small></button>
+      </div>
+      <button type="button" class="layout-edit-button" data-open-layout-editor>売場レイアウトを編集</button>
+      <p class="layout-edit-reason" data-layout-edit-reason></p>
     </section>
   `;
   document.body.prepend(shell);
@@ -583,7 +687,7 @@ function renderStaffPanel(panel: HTMLElement, snapshot: StoreOperationsSnapshot)
   snapshot.staff.forEach((member, index) => {
     const row = document.createElement("div");
     row.className = "staff-assignment-row";
-    row.innerHTML = `<strong>店員${index + 1}</strong>`;
+      row.innerHTML = `<strong>店員${index + 1}<small>優先</small></strong>`;
     for (const task of ["register", "replenishment", "cleaning"] as const) {
       const button = document.createElement("button");
       button.type = "button";
@@ -595,6 +699,140 @@ function renderStaffPanel(panel: HTMLElement, snapshot: StoreOperationsSnapshot)
     }
     grid.append(row);
   });
+  const recommendation = recommendStaffing(snapshot);
+  const label = panel.querySelector<HTMLElement>("[data-staff-recommendation-label]");
+  const reason = panel.querySelector<HTMLElement>("[data-staff-recommendation-reason]");
+  const apply = panel.querySelector<HTMLButtonElement>("[data-apply-recommendation]");
+  if (label) label.textContent = recommendation.label;
+  if (reason) reason.textContent = recommendation.reason;
+  if (apply) apply.dataset.staffPreset = recommendation.preset;
+}
+
+function renderSupplyPanel(panel: HTMLElement, snapshot: StoreOperationsSnapshot): void {
+  const recommendation = recommendSupplyPolicy(snapshot);
+  const label = panel.querySelector<HTMLElement>("[data-supply-recommendation-label]");
+  const reason = panel.querySelector<HTMLElement>("[data-supply-recommendation-reason]");
+  const apply = panel.querySelector<HTMLButtonElement>("[data-apply-supply-recommendation]");
+  if (label) label.textContent = recommendation.label;
+  if (reason) reason.textContent = recommendation.reason;
+  if (apply) {
+    apply.dataset.orderingPreset = recommendation.ordering;
+    apply.dataset.deliveryPreset = recommendation.delivery;
+  }
+  const ordering = optional<HTMLSelectElement>("ordering-policy-select")?.value;
+  const delivery = optional<HTMLSelectElement>("delivery-policy-select")?.value;
+  panel.querySelectorAll<HTMLButtonElement>("[data-ordering-preset]").forEach((button) => {
+    button.setAttribute("aria-pressed", String(button.dataset.orderingPreset === ordering));
+  });
+  panel.querySelectorAll<HTMLButtonElement>("[data-delivery-preset]").forEach((button) => {
+    button.setAttribute("aria-pressed", String(button.dataset.deliveryPreset === delivery));
+  });
+}
+
+function renderProductPanel(panel: HTMLElement, snapshot: StoreOperationsSnapshot): void {
+  const grid = panel.querySelector<HTMLElement>(".product-focus-grid");
+  if (!grid) return;
+  grid.replaceChildren();
+  for (const categoryId of Object.keys(CATEGORY_LABELS) as StoreCategoryId[]) {
+    const inventory = snapshot.inventories[categoryId];
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.productFocus = categoryId;
+    button.setAttribute("aria-pressed", String(snapshot.merchandisingFocus === categoryId));
+    button.innerHTML = `<strong>${CATEGORY_LABELS[categoryId]}</strong><span>棚 ${inventory.shelfUnits}/${inventory.shelfCapacity}</span><small>倉庫 ${inventory.backroomUnits}</small>`;
+    grid.append(button);
+  }
+}
+
+function renderInfoPanel(panel: HTMLElement, snapshot: StoreOperationsSnapshot): void {
+  const summary = summarizeStorePerformance(snapshot);
+  const grade = panel.querySelector<HTMLElement>("[data-performance-grade]");
+  const headline = panel.querySelector<HTMLElement>("[data-performance-headline]");
+  const action = panel.querySelector<HTMLElement>("[data-performance-action]");
+  if (grade) grade.textContent = summary.grade;
+  if (headline) headline.textContent = summary.headline;
+  if (action) action.textContent = summary.nextAction;
+  const percent = (value: number): string => `${Math.round(value * 100)}%`;
+  const grid = panel.querySelector<HTMLElement>(".performance-grid");
+  if (grid) {
+    grid.innerHTML = `
+      <div><span>購入率</span><strong>${percent(summary.conversionRate)}</strong></div>
+      <div><span>在庫充足</span><strong>${percent(summary.availabilityRate)}</strong></div>
+      <div><span>レジ対応</span><strong>${percent(summary.serviceRate)}</strong></div>
+      <div><span>清潔度</span><strong>${percent(summary.cleanlinessRate)}</strong></div>
+      <div><span>店舗信頼</span><strong>${percent(snapshot.serviceTrust)}</strong></div>
+      <div><span>常連会計</span><strong>${snapshot.kpis.regularTransactions}/${snapshot.kpis.regularVisits}</strong></div>
+      <div><span>売上</span><strong>¥${snapshot.kpis.revenue.toLocaleString("ja-JP")}</strong></div>
+      <div><span>来店／会計</span><strong>${snapshot.kpis.enteredCustomers}／${snapshot.kpis.transactions}</strong></div>`;
+  }
+  const history = panel.querySelector<HTMLElement>("[data-daily-history]");
+  if (history) {
+    const recent = snapshot.dailyHistory.slice(-5).reverse();
+    history.innerHTML = recent.length === 0
+      ? "<p>一日の営業を終えると、ここに推移が表示されます。</p>"
+      : `<h3>直近の営業</h3>${recent.map((result) => {
+          const conversion = result.enteredCustomers > 0
+            ? Math.round(result.transactions / result.enteredCustomers * 100)
+            : 0;
+          return `<div><b>${result.day}日目</b><span>売上 ¥${result.revenue.toLocaleString("ja-JP")}</span><span>購入率 ${conversion}%</span><small>信頼${Math.round(result.serviceTrust * 100)}%／常連${result.regularTransactions}件</small></div>`;
+        }).join("")}`;
+  }
+}
+
+function renderTimePanel(panel: HTMLElement): void {
+  const now = panel.querySelector<HTMLElement>("[data-time-now]");
+  if (now) now.textContent = `${currentDay()}日目 ${optional("time-label")?.textContent ?? "06:00"}`;
+  const speed = optional<HTMLSelectElement>("speed-select")?.value ?? "1";
+  panel.querySelectorAll<HTMLButtonElement>("[data-time-speed]").forEach((button) => {
+    button.setAttribute("aria-pressed", String(button.dataset.timeSpeed === speed));
+  });
+  const autoStop = panel.querySelector<HTMLInputElement>("[data-time-auto-stop]");
+  if (autoStop) autoStop.checked = optional<HTMLInputElement>("auto-stop-checkbox")?.checked ?? true;
+}
+
+function renderStorePolicyPanel(panel: HTMLElement, snapshot: StoreOperationsSnapshot): void {
+  const status = panel.querySelector<HTMLElement>("[data-store-live-status]");
+  const count = panel.querySelector<HTMLElement>("[data-store-customer-count]");
+  const reason = panel.querySelector<HTMLElement>("[data-layout-edit-reason]");
+  const edit = panel.querySelector<HTMLButtonElement>("[data-open-layout-editor]");
+  if (status) status.textContent = isStoreOpen() ? (isPlaying() ? "営業中" : "一時停止中") : "営業時間外";
+  if (count) count.textContent = `店内 ${snapshot.customers.length}人`;
+  const canEdit = !isPlaying() && snapshot.customers.length === 0;
+  if (edit) edit.disabled = !canEdit;
+  if (reason) {
+    reason.textContent = canEdit
+      ? "店内に客がいないため編集できます。"
+      : isPlaying()
+        ? "時間を停止すると編集準備に入れます。"
+        : `あと${snapshot.customers.length}人の退店後に編集できます。`;
+  }
+  const opening = optional<HTMLSelectElement>("opening-hour-select")?.value;
+  const closing = optional<HTMLSelectElement>("closing-hour-select")?.value;
+  panel.querySelectorAll<HTMLButtonElement>("[data-opening-hours]").forEach((button) => {
+    button.setAttribute("aria-pressed", String(button.dataset.openingHours === `${opening},${closing}`));
+  });
+}
+
+function renderLiveIncident(shell: HTMLElement, snapshot: StoreOperationsSnapshot): void {
+  const banner = shell.querySelector<HTMLElement>("[data-live-incident]");
+  if (!banner) return;
+  const incident = detectStoreIncidents(snapshot)[0];
+  if (!incident) {
+    banner.hidden = true;
+    lastAutoStoppedIncident = "";
+    return;
+  }
+  banner.hidden = false;
+  banner.dataset.severity = incident.severity;
+  const title = banner.querySelector("strong");
+  const detail = banner.querySelector("span");
+  if (title) title.textContent = incident.title;
+  if (detail) detail.textContent = incident.detail;
+  const autoStop = optional<HTMLInputElement>("auto-stop-checkbox")?.checked ?? true;
+  if (incident.severity === "critical" && autoStop && isPlaying() && lastAutoStoppedIncident !== incident.id) {
+    lastAutoStoppedIncident = incident.id;
+    optional<HTMLButtonElement>("play-button")?.click();
+  }
 }
 
 function bindNavigation(
@@ -604,11 +842,44 @@ function bindNavigation(
   replaceEngine: (engine: StoreOperationsEngine) => void,
 ): void {
   const staffPanel = shell.querySelector<HTMLElement>("#store-staff-panel");
+  const supplyPanel = shell.querySelector<HTMLElement>("#store-supply-panel");
+  const productPanel = shell.querySelector<HTMLElement>("#store-product-panel");
+  const infoPanel = shell.querySelector<HTMLElement>("#store-info-panel");
+  const timePanel = shell.querySelector<HTMLElement>("#store-time-panel");
+  const storePolicyPanel = shell.querySelector<HTMLElement>("#store-policy-panel");
   shell.addEventListener("click", (event) => {
     const target = event.target as Element | null;
     const closeStaff = target?.closest<HTMLButtonElement>("[data-close-staff]");
     if (closeStaff && staffPanel) {
       staffPanel.hidden = true;
+      return;
+    }
+    if (target?.closest("[data-close-supply]") && supplyPanel) {
+      supplyPanel.hidden = true;
+      return;
+    }
+    if (target?.closest("[data-close-product]") && productPanel) {
+      productPanel.hidden = true;
+      return;
+    }
+    if (target?.closest("[data-close-info]") && infoPanel) {
+      infoPanel.hidden = true;
+      return;
+    }
+    if (target?.closest("[data-close-time]") && timePanel) {
+      timePanel.hidden = true;
+      return;
+    }
+    if (target?.closest("[data-close-store-policy]") && storePolicyPanel) {
+      storePolicyPanel.hidden = true;
+      return;
+    }
+    if (target?.closest("[data-open-info-detail]")) {
+      openDetail("info");
+      return;
+    }
+    if (target?.closest("[data-open-product-detail]")) {
+      openDetail("product");
       return;
     }
     const staffChoice = target?.closest<HTMLButtonElement>("[data-staff-member]");
@@ -622,17 +893,108 @@ function bindNavigation(
       saveEngine(getEngine());
       return;
     }
+    const presetButton = target?.closest<HTMLButtonElement>("[data-staff-preset]");
+    if (presetButton && staffPanel) {
+      const preset = presetButton.dataset.staffPreset as StoreStaffPreset | undefined;
+      if (!preset) return;
+      const snapshot = getEngine().getSnapshot();
+      getEngine().setStaffAssignments(assignmentsForPreset(preset, snapshot.staff.length));
+      renderStaffPanel(staffPanel, getEngine().getSnapshot());
+      saveEngine(getEngine());
+      return;
+    }
+    const supplyButton = target?.closest<HTMLButtonElement>(
+      "[data-ordering-preset], [data-delivery-preset]",
+    );
+    if (supplyButton && supplyPanel) {
+      const orderingSelect = optional<HTMLSelectElement>("ordering-policy-select");
+      const deliverySelect = optional<HTMLSelectElement>("delivery-policy-select");
+      if (supplyButton.dataset.orderingPreset && orderingSelect) {
+        orderingSelect.value = supplyButton.dataset.orderingPreset;
+      }
+      if (supplyButton.dataset.deliveryPreset && deliverySelect) {
+        deliverySelect.value = supplyButton.dataset.deliveryPreset;
+      }
+      optional<HTMLButtonElement>("apply-policy-button")?.click();
+      syncSupplyPolicy(getEngine());
+      renderSupplyPanel(supplyPanel, getEngine().getSnapshot());
+      saveEngine(getEngine());
+      return;
+    }
+    const focusButton = target?.closest<HTMLButtonElement>("[data-product-focus]");
+    if (focusButton && productPanel) {
+      const category = focusButton.dataset.productFocus as StoreCategoryId | undefined;
+      if (!category) return;
+      const snapshot = getEngine().getSnapshot();
+      getEngine().setMerchandisingFocus(snapshot.merchandisingFocus === category ? undefined : category);
+      renderProductPanel(productPanel, getEngine().getSnapshot());
+      saveEngine(getEngine());
+      return;
+    }
+    const timeCommand = target?.closest<HTMLButtonElement>("[data-time-command]");
+    if (timeCommand && timePanel) {
+      const proxyId = {
+        play: "play-button",
+        slot: "slot-button",
+        day: "day-button",
+      }[timeCommand.dataset.timeCommand ?? ""];
+      if (proxyId) optional<HTMLButtonElement>(proxyId)?.click();
+      renderTimePanel(timePanel);
+      return;
+    }
+    const speedButton = target?.closest<HTMLButtonElement>("[data-time-speed]");
+    if (speedButton && timePanel) {
+      const select = optional<HTMLSelectElement>("speed-select");
+      if (select && speedButton.dataset.timeSpeed) {
+        select.value = speedButton.dataset.timeSpeed;
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+      renderTimePanel(timePanel);
+      return;
+    }
+    const autoStopInput = target?.closest<HTMLInputElement>("[data-time-auto-stop]");
+    if (autoStopInput) {
+      const source = optional<HTMLInputElement>("auto-stop-checkbox");
+      if (source) {
+        source.checked = autoStopInput.checked;
+        source.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+      return;
+    }
+    const hoursButton = target?.closest<HTMLButtonElement>("[data-opening-hours]");
+    if (hoursButton && storePolicyPanel) {
+      const [opening, closing] = (hoursButton.dataset.openingHours ?? "").split(",");
+      const openingSelect = optional<HTMLSelectElement>("opening-hour-select");
+      const closingSelect = optional<HTMLSelectElement>("closing-hour-select");
+      if (opening && closing && openingSelect && closingSelect) {
+        openingSelect.value = opening;
+        closingSelect.value = closing;
+        optional<HTMLButtonElement>("apply-policy-button")?.click();
+      }
+      renderStorePolicyPanel(storePolicyPanel, getEngine().getSnapshot());
+      return;
+    }
+    if (target?.closest("[data-open-layout-editor]") && storePolicyPanel) {
+      storePolicyPanel.hidden = true;
+      layoutEditor.open();
+      return;
+    }
 
     const button = target?.closest<HTMLButtonElement>("[data-game-action]");
     if (!button) return;
     const action = button.dataset.gameAction;
     if (action === "time") {
-      optional<HTMLButtonElement>("play-button")?.click();
-      button.setAttribute("aria-pressed", String(isPlaying()));
+      if (timePanel) {
+        renderTimePanel(timePanel);
+        timePanel.hidden = !timePanel.hidden;
+      }
       return;
     }
     if (action === "store") {
-      layoutEditor.open();
+      if (storePolicyPanel) {
+        renderStorePolicyPanel(storePolicyPanel, getEngine().getSnapshot());
+        storePolicyPanel.hidden = !storePolicyPanel.hidden;
+      }
       return;
     }
     if (action === "staff" && staffPanel) {
@@ -640,7 +1002,22 @@ function bindNavigation(
       staffPanel.hidden = !staffPanel.hidden;
       return;
     }
-    if (action === "product" || action === "order" || action === "info" || action === "detail") {
+    if (action === "order" && supplyPanel) {
+      renderSupplyPanel(supplyPanel, getEngine().getSnapshot());
+      supplyPanel.hidden = !supplyPanel.hidden;
+      return;
+    }
+    if (action === "product" && productPanel) {
+      renderProductPanel(productPanel, getEngine().getSnapshot());
+      productPanel.hidden = !productPanel.hidden;
+      return;
+    }
+    if (action === "info" && infoPanel) {
+      renderInfoPanel(infoPanel, getEngine().getSnapshot());
+      infoPanel.hidden = !infoPanel.hidden;
+      return;
+    }
+    if (action === "detail") {
       openDetail(action);
     }
   });
@@ -707,21 +1084,24 @@ function start(): void {
   });
   bindNavigation(shell, layoutEditor, getEngine, replaceEngine);
 
-  engine.advance(0.01, engineContext());
+  engine.advance(0.01, engineContext(engine.getSnapshot().merchandisingFocus));
 
   const render = (timestamp: number): void => {
     const realDelta = Math.min(0.1, Math.max(0, (timestamp - lastTimestamp) / 1000));
     lastTimestamp = timestamp;
     const day = currentDay();
+    syncSupplyPolicy(engine);
     if (day !== knownDay) {
       engine.beginDay(day);
       knownDay = day;
     }
-    if (isPlaying()) engine.advance(realDelta * visualTimeScale(), engineContext());
-    else engine.advance(0.001, engineContext());
+    const focus = engine.getSnapshot().merchandisingFocus;
+    if (isPlaying()) engine.advance(realDelta * visualTimeScale(), engineContext(focus));
+    else engine.advance(0.001, engineContext(focus));
 
     const snapshot = engine.getSnapshot();
     drawFrame(context, layout, snapshot, layoutEditor.isOpen());
+    renderLiveIncident(shell, snapshot);
     const timeButton = shell.querySelector<HTMLButtonElement>("[data-game-action='time']");
     if (timeButton) timeButton.setAttribute("aria-pressed", String(isPlaying()));
 

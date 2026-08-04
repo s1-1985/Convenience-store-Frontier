@@ -31,13 +31,16 @@ export interface FixtureArtworkPlacement {
 
 export type AgentFacing = "front" | "left" | "right" | "back";
 
-const FIXTURE_CELL_WIDTH = 144;
-const FIXTURE_CELL_HEIGHT = 96;
-const STAFF_CELL_WIDTH = 72;
-const STAFF_CELL_HEIGHT = 96;
-const CUSTOMER_CELL_WIDTH = 64;
-const CUSTOMER_CELL_HEIGHT = 88;
-const ICON_CELL_SIZE = 48;
+// The source-controlled SVG atlases are the canonical game assets.  Previous
+// builds pointed at generated WebP files which were not present in a clean
+// checkout, so Android silently fell back to placeholder rectangles.
+const FIXTURE_CELL_WIDTH = 384;
+const FIXTURE_CELL_HEIGHT = 256;
+const STAFF_CELL_WIDTH = 192;
+const STAFF_CELL_HEIGHT = 256;
+const CUSTOMER_CELL_WIDTH = 160;
+const CUSTOMER_CELL_HEIGHT = 220;
+const ICON_CELL_SIZE = 128;
 
 const FIXTURE_INDEX: Record<string, number> = {
   entrance: 0,
@@ -70,10 +73,10 @@ const FACING_COLUMN: Record<AgentFacing, number> = {
 const CUSTOMER_ROWS = [0, 1, 2, 3, 4, 5] as const;
 
 const ASSET_URLS = {
-  fixtures: "/assets/store/fixtures.webp",
-  staff: "/assets/store/staff.webp",
-  customers: "/assets/store/customers.webp",
-  icons: "/assets/store/icons.webp",
+  fixtures: "/assets/store/fixtures.svg",
+  staff: "/assets/store/staff.svg",
+  customers: "/assets/store/customers.svg",
+  icons: "/assets/store/icons.svg",
 } as const;
 
 function loadImage(url: string): Promise<HTMLImageElement> {
@@ -203,8 +206,7 @@ export function drawFixtureArtwork(
   };
 
   context.save();
-  context.imageSmoothingEnabled = true;
-  context.imageSmoothingQuality = "high";
+  context.imageSmoothingEnabled = false;
   if (rotated) {
     context.translate(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
     context.rotate(Math.PI / 2);
@@ -321,8 +323,8 @@ export function drawUiIcon(
 }
 
 export const STORE_ART_ATLAS_SPEC = {
-  fixtures: { width: 576, height: 288, columns: 4, rows: 3 },
-  staff: { width: 288, height: 288, columns: 4, rows: 3 },
-  customers: { width: 256, height: 528, columns: 4, rows: 6 },
-  icons: { width: 384, height: 48, columns: 8, rows: 1 },
+  fixtures: { width: 1536, height: 768, columns: 4, rows: 3 },
+  staff: { width: 768, height: 768, columns: 4, rows: 3 },
+  customers: { width: 640, height: 1760, columns: 4, rows: 8 },
+  icons: { width: 1024, height: 128, columns: 8, rows: 1 },
 } as const;

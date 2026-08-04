@@ -1,5 +1,13 @@
 # AndroidデモAPK
 
+## 直接ダウンロード
+
+最新の固定署名版APKは、次のリンクから直接ダウンロードできる。
+
+[convenience-store-frontier-demo-fixed.apk](https://github.com/s1-1985/Convenience-store-Frontier/releases/download/demo-latest/convenience-store-frontier-demo-fixed.apk)
+
+チェックサムは[SHA-256ファイル](https://github.com/s1-1985/Convenience-store-Frontier/releases/download/demo-latest/convenience-store-frontier-demo-fixed.apk.sha256)で確認する。`main`への更新または手動実行のたびに、同じURLのファイルを最新ビルドで置き換える。
+
 Web版をCapacitorでAndroidアプリへ包み、GitHub Actionsからインストール可能なdebug APKを生成する。
 
 ## CIから取得
