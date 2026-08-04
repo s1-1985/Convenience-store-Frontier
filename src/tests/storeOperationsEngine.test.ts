@@ -12,6 +12,7 @@ import {
 function context(overrides: Partial<StoreEngineContext> = {}): StoreEngineContext {
   return {
     isOpen: true,
+    hour: 12,
     arrivalRatePerMinute: 10,
     categoryWeights: defaultCategoryWeightsForHour(12),
     requestedStaffCount: 3,
@@ -145,6 +146,7 @@ describe("individual store operations engine", () => {
     safe.setSupplyPolicy("stockout_prevention", "all_categories_twice_daily");
     lean.beginDay(2);
     safe.beginDay(2);
+    safe.advance(0.1, context({ isOpen: false, hour: 13 }));
 
     const leanStock = Object.values(lean.getSnapshot().inventories).reduce(
       (sum, inventory) => sum + inventory.backroomUnits,
@@ -155,6 +157,27 @@ describe("individual store operations engine", () => {
       0,
     );
     expect(safeStock).toBeGreaterThan(leanStock);
+  });
+
+  it("schedules exactly one midday second delivery for twice-daily policies", () => {
+    const source = createStoreOperationsEngine(91).serialize();
+    for (const inventory of Object.values(source.inventories)) inventory.backroomUnits = 0;
+    const engine = restoreStoreOperationsEngine(source);
+    engine.setSupplyPolicy("standard", "ready_to_eat_twice_daily");
+    engine.beginDay(2);
+    const afterMorning = engine.getSnapshot();
+
+    engine.advance(0.1, context({ isOpen: false, hour: 12.75 }));
+    expect(engine.getSnapshot().inventories).toEqual(afterMorning.inventories);
+    engine.advance(0.1, context({ isOpen: false, hour: 13 }));
+    const afterSecond = engine.getSnapshot();
+    expect(afterSecond.inventories.ready_meal.backroomUnits)
+      .toBeGreaterThan(afterMorning.inventories.ready_meal.backroomUnits);
+    expect(afterSecond.inventories.drinks.backroomUnits)
+      .toBe(afterMorning.inventories.drinks.backroomUnits);
+
+    engine.advance(0.1, context({ isOpen: false, hour: 16 }));
+    expect(engine.getSnapshot().inventories).toEqual(afterSecond.inventories);
   });
 
   it("persists the selected merchandising focus", () => {

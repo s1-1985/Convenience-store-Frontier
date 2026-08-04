@@ -148,6 +148,7 @@ function engineContext(focus?: StoreCategoryId): StoreEngineContext {
   if (focus) weights[focus] *= 1.35;
   return {
     isOpen: isStoreOpen(),
+    hour: currentHour() + currentMinute() / 60,
     arrivalRatePerMinute: arrivalRatePerMinute(),
     categoryWeights: weights,
     requestedStaffCount: currentStaffing(),

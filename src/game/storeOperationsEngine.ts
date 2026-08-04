@@ -136,6 +136,7 @@ export interface StoreStaffAssignments {
 
 export interface StoreEngineContext {
   isOpen: boolean;
+  hour: number;
   arrivalRatePerMinute: number;
   categoryWeights: Record<StoreCategoryId, number>;
   requestedStaffCount: number;
@@ -165,6 +166,7 @@ export interface SerializedStoreOperations extends StoreOperationsSnapshot {
   spawnAccumulator: number;
   orderingPolicy?: StoreOrderingPolicy;
   deliveryPolicy?: StoreDeliveryPolicy;
+  secondDeliveryCompletedDay?: number;
 }
 
 export type StoreOrderingPolicy = "sell_through" | "standard" | "stockout_prevention";
@@ -557,6 +559,7 @@ export function createStoreOperationsEngine(
   let lastRequestedStaffCount = Math.max(1, staff.length || 2);
   let orderingPolicy: StoreOrderingPolicy = restored?.orderingPolicy ?? "standard";
   let deliveryPolicy: StoreDeliveryPolicy = restored?.deliveryPolicy ?? "once_daily";
+  let secondDeliveryCompletedDay = restored?.secondDeliveryCompletedDay ?? 0;
   let merchandisingFocus = restored?.merchandisingFocus;
   let dailyHistory = restored?.dailyHistory?.map((result) => ({
     ...result,
@@ -973,26 +976,30 @@ export function createStoreOperationsEngine(
     });
   }
 
-  function deliverDailyStock(): void {
+  function deliverStock(categories: readonly StoreCategoryId[], quantityMultiplier: number): void {
     const orderingMultiplier = orderingPolicy === "sell_through"
       ? 0.82
       : orderingPolicy === "stockout_prevention"
         ? 1.42
         : 1.08;
-    for (const categoryId of CATEGORY_IDS) {
+    for (const categoryId of categories) {
       const inventory = inventories[categoryId];
-      const deliveryMultiplier = deliveryPolicy === "all_categories_twice_daily"
-        ? 1.28
-        : deliveryPolicy === "ready_to_eat_twice_daily" && categoryId === "ready_meal"
-          ? 1.35
-          : 1;
       const targetBackroom = Math.round(inventory.shelfCapacity * 2.1 * orderingMultiplier);
       if (inventory.backroomUnits < targetBackroom) {
         inventory.backroomUnits += Math.round(
-          inventory.shelfCapacity * orderingMultiplier * deliveryMultiplier,
+          inventory.shelfCapacity * orderingMultiplier * quantityMultiplier,
         );
       }
     }
+  }
+
+  function deliverMorningStock(): void {
+    deliverStock(CATEGORY_IDS, 1);
+  }
+
+  function deliverSecondStock(): void {
+    if (deliveryPolicy === "ready_to_eat_twice_daily") deliverStock(["ready_meal"], 0.72);
+    if (deliveryPolicy === "all_categories_twice_daily") deliverStock(CATEGORY_IDS, 0.58);
   }
 
   return {
@@ -1001,6 +1008,15 @@ export function createStoreOperationsEngine(
       if (safeDelta <= 0) return;
       elapsedSeconds += safeDelta;
       syncStaffCount(context.requestedStaffCount);
+
+      if (
+        context.hour >= 13 &&
+        deliveryPolicy !== "once_daily" &&
+        secondDeliveryCompletedDay !== day
+      ) {
+        deliverSecondStock();
+        secondDeliveryCompletedDay = day;
+      }
 
       if (context.isOpen) {
         spawnAccumulator += Math.max(0, context.arrivalRatePerMinute) * safeDelta / 60;
@@ -1041,7 +1057,7 @@ export function createStoreOperationsEngine(
       kpis = emptyKpis();
       spawnAccumulator = 0;
       checkoutProgressSeconds = 0;
-      deliverDailyStock();
+      deliverMorningStock();
     },
 
     setStaffAssignments(nextAssignments: StoreStaffAssignments): void {
@@ -1104,6 +1120,7 @@ export function createStoreOperationsEngine(
         orderingPolicy,
         deliveryPolicy,
         merchandisingFocus,
+        secondDeliveryCompletedDay,
       };
     },
   };

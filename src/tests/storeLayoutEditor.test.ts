@@ -114,6 +114,7 @@ describe("constrained store layout editor", () => {
     for (let elapsed = 0; elapsed < 45; elapsed += 0.25) {
       engine.advance(0.25, {
         isOpen: true,
+        hour: 12,
         arrivalRatePerMinute: 14,
         categoryWeights: defaultCategoryWeightsForHour(12),
         requestedStaffCount: 2,
