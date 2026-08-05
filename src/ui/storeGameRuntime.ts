@@ -1,4 +1,5 @@
 import {
+  categoryPriceRange,
   createStoreOperationsEngine,
   defaultCategoryWeightsForHour,
   restoreStoreOperationsEngine,
@@ -367,6 +368,7 @@ function drawCustomer(
   if (customer.state === "browsing" && customer.targetCategory) bubble = CATEGORY_LABELS[customer.targetCategory].slice(0, 2);
   if (customer.state === "queueing" && customer.patienceRemainingSeconds < 6) bubble = "!";
   if (customer.state === "leaving" && customer.reason === "stockout") bubble = "品切?";
+  if (customer.state === "leaving" && customer.reason === "price") bubble = "高い…";
   if (bubble) drawBubble(context, bubble, pixel.x, pixel.y - 83);
 }
 
@@ -739,8 +741,16 @@ function renderProductPanel(panel: HTMLElement, snapshot: StoreOperationsSnapsho
     button.type = "button";
     button.dataset.productFocus = categoryId;
     button.setAttribute("aria-pressed", String(snapshot.merchandisingFocus === categoryId));
+    const priceRange = categoryPriceRange(categoryId);
     button.innerHTML = `<strong>${CATEGORY_LABELS[categoryId]}</strong><span>棚 ${inventory.shelfUnits}/${inventory.shelfCapacity}</span><small>倉庫 ${inventory.backroomUnits}</small>`;
     grid.append(button);
+    const priceControls = document.createElement("div");
+    priceControls.className = "product-price-controls";
+    priceControls.innerHTML = `
+      <button type="button" data-price-category="${categoryId}" data-price-delta="-10" ${inventory.price <= priceRange.min ? "disabled" : ""}>−</button>
+      <output>¥${inventory.price.toLocaleString("ja-JP")}</output>
+      <button type="button" data-price-category="${categoryId}" data-price-delta="10" ${inventory.price >= priceRange.max ? "disabled" : ""}>＋</button>`;
+    grid.append(priceControls);
   }
 }
 
@@ -763,6 +773,7 @@ function renderInfoPanel(panel: HTMLElement, snapshot: StoreOperationsSnapshot):
       <div><span>店舗信頼</span><strong>${percent(snapshot.serviceTrust)}</strong></div>
       <div><span>常連会計</span><strong>${snapshot.kpis.regularTransactions}/${snapshot.kpis.regularVisits}</strong></div>
       <div><span>売上</span><strong>¥${snapshot.kpis.revenue.toLocaleString("ja-JP")}</strong></div>
+      <div><span>価格不満</span><strong>${snapshot.kpis.priceRefusals}件</strong></div>
       <div><span>来店／会計</span><strong>${snapshot.kpis.enteredCustomers}／${snapshot.kpis.transactions}</strong></div>`;
   }
   const history = panel.querySelector<HTMLElement>("[data-daily-history]");
@@ -927,6 +938,17 @@ function bindNavigation(
       if (!category) return;
       const snapshot = getEngine().getSnapshot();
       getEngine().setMerchandisingFocus(snapshot.merchandisingFocus === category ? undefined : category);
+      renderProductPanel(productPanel, getEngine().getSnapshot());
+      saveEngine(getEngine());
+      return;
+    }
+    const priceButton = target?.closest<HTMLButtonElement>("[data-price-category]");
+    if (priceButton && productPanel) {
+      const category = priceButton.dataset.priceCategory as StoreCategoryId | undefined;
+      const delta = Number(priceButton.dataset.priceDelta);
+      if (!category || !Number.isFinite(delta)) return;
+      const inventory = getEngine().getSnapshot().inventories[category];
+      getEngine().setCategoryPrice(category, inventory.price + delta);
       renderProductPanel(productPanel, getEngine().getSnapshot());
       saveEngine(getEngine());
       return;

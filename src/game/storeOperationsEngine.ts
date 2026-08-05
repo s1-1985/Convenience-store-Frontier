@@ -67,7 +67,7 @@ export interface StoreCustomerAgent {
   patienceRemainingSeconds: number;
   regular: boolean;
   variant: number;
-  reason?: "completed" | "stockout" | "queue_abandonment" | "unreachable";
+  reason?: "completed" | "stockout" | "price" | "queue_abandonment" | "unreachable";
 }
 
 export type StaffState =
@@ -107,6 +107,7 @@ export interface StoreDayKpis {
   unitsSold: number;
   revenue: number;
   stockoutEncounters: number;
+  priceRefusals: number;
   noPurchaseExits: number;
   queueAbandonments: number;
   maximumQueueLength: number;
@@ -181,6 +182,7 @@ export interface StoreOperationsEngine {
   setStaffAssignments(assignments: StoreStaffAssignments): void;
   setSupplyPolicy(ordering: StoreOrderingPolicy, delivery: StoreDeliveryPolicy): void;
   setMerchandisingFocus(category?: StoreCategoryId): void;
+  setCategoryPrice(category: StoreCategoryId, price: number): void;
   getSnapshot(): StoreOperationsSnapshot;
   getLayout(): StoreLayout;
   serialize(): SerializedStoreOperations;
@@ -205,6 +207,14 @@ const CATEGORY_DEFAULTS: Record<StoreCategoryId, Omit<ShelfInventoryState, "cate
   daily_goods: { shelfUnits: 12, shelfCapacity: 16, backroomUnits: 30, price: 420 },
   magazines: { shelfUnits: 9, shelfCapacity: 12, backroomUnits: 18, price: 490 },
 };
+
+export function categoryPriceRange(category: StoreCategoryId): { min: number; max: number } {
+  const basePrice = CATEGORY_DEFAULTS[category].price;
+  return {
+    min: Math.ceil(basePrice * 0.7 / 10) * 10,
+    max: Math.floor(basePrice * 1.5 / 10) * 10,
+  };
+}
 
 const CUSTOMER_MOVE_SPEED = 3.2;
 const STAFF_MOVE_SPEED = 3.8;
@@ -434,6 +444,7 @@ function emptyKpis(): StoreDayKpis {
     unitsSold: 0,
     revenue: 0,
     stockoutEncounters: 0,
+    priceRefusals: 0,
     noPurchaseExits: 0,
     queueAbandonments: 0,
     maximumQueueLength: 0,
@@ -593,8 +604,13 @@ export function createStoreOperationsEngine(
     const count = random() < 0.58 ? 1 : random() < 0.82 ? 2 : 3;
     const result: StoreCategoryId[] = [];
     const excluded = new Set<StoreCategoryId>();
+    const priceAdjustedWeights = Object.fromEntries(CATEGORY_IDS.map((categoryId) => {
+      const basePrice = CATEGORY_DEFAULTS[categoryId].price;
+      const relativePrice = inventories[categoryId].price / basePrice;
+      return [categoryId, weights[categoryId] * Math.pow(relativePrice, -1.35)];
+    })) as Record<StoreCategoryId, number>;
     for (let index = 0; index < count; index += 1) {
-      const category = weightedCategory(weights, excluded);
+      const category = weightedCategory(priceAdjustedWeights, excluded);
       if (!category) break;
       result.push(category);
       excluded.add(category);
@@ -680,6 +696,24 @@ export function createStoreOperationsEngine(
     if (!customer.attemptedCategories.includes(categoryId)) customer.attemptedCategories.push(categoryId);
     const inventory = inventories[categoryId];
     if (inventory.shelfUnits > 0) {
+      const basePrice = CATEGORY_DEFAULTS[categoryId].price;
+      const relativePrice = inventory.price / basePrice;
+      const purchaseChance = clamp(
+        1.08 - Math.max(0, relativePrice - 1) * 0.9 + (customer.regular ? 0.08 : 0),
+        0.45,
+        1,
+      );
+      if (random() > purchaseChance) {
+        kpis.priceRefusals += 1;
+        const nextCategory = customer.wishList.shift();
+        if (nextCategory && routeCustomerToCategory(customer, nextCategory)) return;
+        if (customer.basketUnits > 0) routeCustomerToQueue(customer);
+        else {
+          kpis.noPurchaseExits += 1;
+          routeCustomerToExit(customer, "price");
+        }
+        return;
+      }
       const desiredUnits = random() < 0.18 ? 2 : 1;
       const purchasedUnits = Math.min(desiredUnits, inventory.shelfUnits);
       inventory.shelfUnits -= purchasedUnits;
@@ -1072,6 +1106,11 @@ export function createStoreOperationsEngine(
 
     setMerchandisingFocus(category?: StoreCategoryId): void {
       merchandisingFocus = category;
+    },
+
+    setCategoryPrice(category: StoreCategoryId, nextPrice: number): void {
+      const range = categoryPriceRange(category);
+      inventories[category].price = clamp(Math.round(nextPrice / 10) * 10, range.min, range.max);
     },
 
     getSnapshot(): StoreOperationsSnapshot {

@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  categoryPriceRange,
   createDefaultStoreLayout,
   createStoreOperationsEngine,
   defaultCategoryWeightsForHour,
   findStorePath,
   restoreStoreOperationsEngine,
   type StoreEngineContext,
+  type StoreCategoryId,
   type StoreOperationsEngine,
 } from "../game/storeOperationsEngine.js";
 
@@ -186,6 +188,30 @@ describe("individual store operations engine", () => {
 
     const restored = restoreStoreOperationsEngine(engine.serialize());
     expect(restored.getSnapshot().merchandisingFocus).toBe("ready_meal");
+  });
+
+  it("changes category prices in ten-yen steps and persists the bounded value", () => {
+    const engine = createStoreOperationsEngine(1980);
+    const range = categoryPriceRange("ready_meal");
+
+    engine.setCategoryPrice("ready_meal", range.max + 999);
+    expect(engine.getSnapshot().inventories.ready_meal.price).toBe(range.max);
+    engine.setCategoryPrice("drinks", 163);
+    expect(engine.getSnapshot().inventories.drinks.price).toBe(160);
+
+    const restored = restoreStoreOperationsEngine(engine.serialize());
+    expect(restored.getSnapshot().inventories.ready_meal.price).toBe(range.max);
+    expect(restored.getSnapshot().inventories.drinks.price).toBe(160);
+  });
+
+  it("makes visibly overpriced products generate price refusals", () => {
+    const engine = createStoreOperationsEngine(1981);
+    for (const category of Object.keys(engine.getSnapshot().inventories) as StoreCategoryId[]) {
+      engine.setCategoryPrice(category, categoryPriceRange(category).max);
+    }
+
+    run(engine, 240, context({ arrivalRatePerMinute: 18 }));
+    expect(engine.getSnapshot().kpis.priceRefusals).toBeGreaterThan(0);
   });
 
   it("keeps a bounded daily operating history across save and restore", () => {
