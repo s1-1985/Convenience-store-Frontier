@@ -1,4 +1,5 @@
 import {
+  categoryPriceRange,
   createStoreOperationsEngine,
   defaultCategoryWeightsForHour,
   restoreStoreOperationsEngine,
@@ -266,11 +267,57 @@ function drawFloor(context: CanvasRenderingContext2D, layout: StoreLayout, geome
   }
 
   const wallY = geometry.gridY;
-  const wallGradient = context.createLinearGradient(0, wallY, 0, wallY + 21);
-  wallGradient.addColorStop(0, "rgba(255,255,255,.48)");
-  wallGradient.addColorStop(1, "rgba(173,151,119,.18)");
+  const wallGradient = context.createLinearGradient(0, wallY, 0, wallY + 34);
+  wallGradient.addColorStop(0, "#f3eadb");
+  wallGradient.addColorStop(.58, "#d6c6ad");
+  wallGradient.addColorStop(1, "#91836f");
   context.fillStyle = wallGradient;
-  context.fillRect(geometry.gridX + geometry.tileWidth, wallY + 1, width - geometry.tileWidth * 2, 19);
+  context.fillRect(geometry.gridX + geometry.tileWidth, wallY + 1, width - geometry.tileWidth * 2, 31);
+  drawPixelArtStorefront(context, layout, geometry);
+}
+
+function drawPixelArtPlant(context: CanvasRenderingContext2D, x: number, y: number, scale = 1): void {
+  rect(context, x - 10 * scale, y + 15 * scale, 20 * scale, 13 * scale, "#9a633b", "#5b3723", 1);
+  for (const [dx, dy, color] of [[-12, 0, "#2d7f3f"], [0, -7, "#3f9b50"], [12, 0, "#246c36"], [-2, 5, "#58b96a"]] as const) {
+    context.fillStyle = color;
+    context.beginPath();
+    context.arc(x + dx * scale, y + dy * scale, 12 * scale, 0, Math.PI * 2);
+    context.fill();
+  }
+}
+
+function drawPixelArtPoster(context: CanvasRenderingContext2D, x: number, y: number, title: string, body: string): void {
+  rect(context, x, y, 67, 73, "#f8e6bf", "#5b3723", 2);
+  rect(context, x + 5, y + 6, 57, 23, "#c43a2d", "#fff1aa", 1);
+  text(context, title, x + 34, y + 17, 10, "center", "#fff4cf");
+  text(context, body, x + 34, y + 43, 10, "center", "#255a34");
+  text(context, "時給UP", x + 34, y + 58, 10, "center", "#27323a");
+}
+
+function drawPixelArtStorefront(context: CanvasRenderingContext2D, layout: StoreLayout, geometry: StoreViewGeometry): void {
+  const width = layout.width * geometry.tileWidth;
+  const height = layout.height * geometry.tileHeight;
+  const left = geometry.gridX;
+  const top = geometry.gridY;
+  const bottom = top + height;
+  rect(context, left + geometry.tileWidth, bottom - 27, width - geometry.tileWidth * 2, 19, "#d8d1c1", "#706454", 1);
+  rect(context, left + geometry.tileWidth, bottom - 8, width - geometry.tileWidth * 2, 8, "#756e63", "#3c3934", 1);
+  for (let x = left + geometry.tileWidth; x < left + width - geometry.tileWidth; x += 42) {
+    rect(context, x, bottom - 26, 39, 18, "rgba(255,255,255,.08)", "rgba(75,67,55,.28)", 1);
+  }
+  rect(context, left + 99, bottom - 29, 94, 25, "#87cdd1", "#344650", 2);
+  rect(context, left + 116, bottom - 28, 20, 24, "rgba(255,255,255,.35)", "rgba(255,255,255,.16)", 1);
+  rect(context, left + 143, bottom - 28, 22, 24, "rgba(255,255,255,.18)", "rgba(255,255,255,.10)", 1);
+  rect(context, left + 115, bottom - 5, 62, 15, "#287c45", "#13532b", 1);
+  text(context, "いらっしゃいませ", left + 146, bottom + 3, 8, "center", "#fff4cf");
+  rect(context, left + 26, bottom - 60, 35, 68, "#c6382f", "#fff1aa", 2);
+  text(context, "新商品", left + 44, bottom - 36, 12, "center", "#fff4cf");
+  text(context, "!", left + 44, bottom - 14, 18, "center", "#fff4cf");
+  drawPixelArtPlant(context, left + 34, bottom - 20, .9);
+  drawPixelArtPlant(context, left + width - 37, top + 82, .72);
+  drawPixelArtPoster(context, left + width - 93, top + 187, "スタッフ", "募集中");
+  rect(context, left + width - 49, bottom - 56, 26, 43, "#1d83bd", "#0d4363", 2);
+  for (let y = bottom - 49; y < bottom - 20; y += 8) rect(context, left + width - 45, y, 18, 3, "#58b0d9", "#58b0d9", 0);
 }
 
 function fixtureLabel(fixture: StoreFixture): string | undefined {
@@ -279,6 +326,40 @@ function fixtureLabel(fixture: StoreFixture): string | undefined {
   if (fixture.kind === "backroom") return "バックヤード";
   if (fixture.kind === "register") return "レジ";
   return undefined;
+}
+
+function pricePosition(inventory: StoreOperationsSnapshot["inventories"][StoreCategoryId]): "low" | "standard" | "high" {
+  const range = categoryPriceRange(inventory.categoryId);
+  const midpoint = (range.min + range.max) / 2;
+  if (inventory.price <= midpoint - 20) return "low";
+  if (inventory.price >= midpoint + 20) return "high";
+  return "standard";
+}
+
+function drawShelfPriceTag(
+  context: CanvasRenderingContext2D,
+  fixture: StoreFixture,
+  snapshot: StoreOperationsSnapshot,
+  bounds: ReturnType<typeof fixtureBounds>,
+): void {
+  if (!fixture.categoryId || fixture.kind === "waste") return;
+  const inventory = snapshot.inventories[fixture.categoryId];
+  const price = `¥${inventory.price.toLocaleString("ja-JP")}`;
+  const width = Math.max(43, price.length * 8 + 14);
+  const height = 18;
+  const x = bounds.x + bounds.width / 2 - width / 2;
+  const y = bounds.y + bounds.height - height - 4;
+  const position = pricePosition(inventory);
+  const fill = position === "low" ? "#fff088" : position === "high" ? "#ff9a79" : "#fff8dc";
+  rect(context, x, y, width, height, fill, "#5a3721", 1);
+  context.fillStyle = position === "high" ? "#9f261d" : "#355521";
+  context.beginPath();
+  context.moveTo(Math.round(x + width - 10), Math.round(y));
+  context.lineTo(Math.round(x + width), Math.round(y));
+  context.lineTo(Math.round(x + width), Math.round(y + 10));
+  context.closePath();
+  context.fill();
+  text(context, price, x + width / 2, y + height / 2 + 1, 9, "center", "#27323a");
 }
 
 function drawFallbackFixture(
@@ -320,6 +401,7 @@ function drawFixture(
   }
 
   if (fixture.categoryId) {
+    drawShelfPriceTag(context, fixture, snapshot, bounds);
     const inventory = snapshot.inventories[fixture.categoryId];
     const ratio = inventory.shelfCapacity > 0 ? inventory.shelfUnits / inventory.shelfCapacity : 0;
     if (ratio <= 0.35) {
@@ -367,6 +449,7 @@ function drawCustomer(
   if (customer.state === "browsing" && customer.targetCategory) bubble = CATEGORY_LABELS[customer.targetCategory].slice(0, 2);
   if (customer.state === "queueing" && customer.patienceRemainingSeconds < 6) bubble = "!";
   if (customer.state === "leaving" && customer.reason === "stockout") bubble = "品切?";
+  if (customer.state === "leaving" && customer.reason === "price") bubble = "高い…";
   if (bubble) drawBubble(context, bubble, pixel.x, pixel.y - 83);
 }
 
@@ -739,8 +822,16 @@ function renderProductPanel(panel: HTMLElement, snapshot: StoreOperationsSnapsho
     button.type = "button";
     button.dataset.productFocus = categoryId;
     button.setAttribute("aria-pressed", String(snapshot.merchandisingFocus === categoryId));
+    const priceRange = categoryPriceRange(categoryId);
     button.innerHTML = `<strong>${CATEGORY_LABELS[categoryId]}</strong><span>棚 ${inventory.shelfUnits}/${inventory.shelfCapacity}</span><small>倉庫 ${inventory.backroomUnits}</small>`;
     grid.append(button);
+    const priceControls = document.createElement("div");
+    priceControls.className = "product-price-controls";
+    priceControls.innerHTML = `
+      <button type="button" data-price-category="${categoryId}" data-price-delta="-10" ${inventory.price <= priceRange.min ? "disabled" : ""}>−</button>
+      <output>¥${inventory.price.toLocaleString("ja-JP")}</output>
+      <button type="button" data-price-category="${categoryId}" data-price-delta="10" ${inventory.price >= priceRange.max ? "disabled" : ""}>＋</button>`;
+    grid.append(priceControls);
   }
 }
 
@@ -763,6 +854,7 @@ function renderInfoPanel(panel: HTMLElement, snapshot: StoreOperationsSnapshot):
       <div><span>店舗信頼</span><strong>${percent(snapshot.serviceTrust)}</strong></div>
       <div><span>常連会計</span><strong>${snapshot.kpis.regularTransactions}/${snapshot.kpis.regularVisits}</strong></div>
       <div><span>売上</span><strong>¥${snapshot.kpis.revenue.toLocaleString("ja-JP")}</strong></div>
+      <div><span>価格不満</span><strong>${snapshot.kpis.priceRefusals}件</strong></div>
       <div><span>来店／会計</span><strong>${snapshot.kpis.enteredCustomers}／${snapshot.kpis.transactions}</strong></div>`;
   }
   const history = panel.querySelector<HTMLElement>("[data-daily-history]");
@@ -927,6 +1019,17 @@ function bindNavigation(
       if (!category) return;
       const snapshot = getEngine().getSnapshot();
       getEngine().setMerchandisingFocus(snapshot.merchandisingFocus === category ? undefined : category);
+      renderProductPanel(productPanel, getEngine().getSnapshot());
+      saveEngine(getEngine());
+      return;
+    }
+    const priceButton = target?.closest<HTMLButtonElement>("[data-price-category]");
+    if (priceButton && productPanel) {
+      const category = priceButton.dataset.priceCategory as StoreCategoryId | undefined;
+      const delta = Number(priceButton.dataset.priceDelta);
+      if (!category || !Number.isFinite(delta)) return;
+      const inventory = getEngine().getSnapshot().inventories[category];
+      getEngine().setCategoryPrice(category, inventory.price + delta);
       renderProductPanel(productPanel, getEngine().getSnapshot());
       saveEngine(getEngine());
       return;

@@ -20,10 +20,10 @@ body.store-game-mode #app {
   inset: 0;
   z-index: 1000;
   display: grid;
-  grid-template-rows: minmax(0, 1fr) 66px;
+  grid-template-rows: minmax(0, 1fr) 76px;
   background: #061523;
   color: #fff4cf;
-  font-family: system-ui, -apple-system, "Noto Sans JP", sans-serif;
+  font-family: "Trebuchet MS", system-ui, -apple-system, "Noto Sans JP", sans-serif;
 }
 
 .store-game-stage {
@@ -45,7 +45,11 @@ body.store-game-mode #app {
   max-height: 100%;
   image-rendering: pixelated;
   background: #071e36;
-  box-shadow: 0 0 0 2px #dca638, 0 10px 40px rgba(0, 0, 0, .45);
+  border: 3px solid #041523;
+  box-shadow:
+    0 0 0 2px #f7c84a,
+    0 0 0 5px #0d3b63,
+    0 10px 40px rgba(0, 0, 0, .45);
 }
 
 .store-game-menu {
@@ -110,17 +114,18 @@ body.store-game-mode #app {
   min-width: 0;
   min-height: 50px;
   display: grid;
-  grid-template-columns: 28px auto;
+  grid-template-columns: 34px auto;
   align-items: center;
   justify-content: center;
   gap: 7px;
-  padding: 3px 7px;
-  border: 2px solid #e4ad3e;
-  border-radius: 10px;
-  background: linear-gradient(#174e80, #0a3156);
-  color: #fff4cf;
-  box-shadow: inset 0 1px rgba(255,255,255,.22), 0 2px 0 #805a1a;
-  font: 900 clamp(12px, 2.2vw, 18px)/1 system-ui, sans-serif;
+  padding: 5px 8px 8px;
+  border: 3px solid #f7c84a;
+  border-radius: 8px;
+  background: linear-gradient(#ffe58a, #f2b72d 54%, #c98212);
+  color: #082440;
+  box-shadow: inset 0 0 0 2px #fff7bd, 0 3px 0 #6b4410;
+  font: 900 clamp(13px, 2.2vw, 19px)/1 system-ui, sans-serif;
+  text-shadow: 1px 1px 0 rgba(255,255,255,.5);
 }
 
 .store-game-nav button:active,
@@ -132,8 +137,8 @@ body.store-game-mode #app {
 }
 
 .store-nav-icon {
-  width: 28px;
-  height: 28px;
+  width: 34px;
+  height: 34px;
   display: block;
   background-image: url("/assets/store/icons.svg");
   image-rendering: pixelated;
@@ -335,6 +340,24 @@ body.store-game-mode #app {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 8px;
+}
+
+.product-price-controls {
+  display: grid;
+  grid-template-columns: 2.25rem 1fr 2.25rem;
+  align-items: center;
+  gap: 0.35rem;
+  margin: -0.35rem 0 0.2rem;
+}
+
+.product-price-controls output {
+  color: #ffe694;
+  font-weight: 800;
+  text-align: center;
+}
+
+.product-price-controls button {
+  min-height: 2rem;
 }
 
 .product-focus-grid button,

@@ -16,4 +16,13 @@ describe("live store incidents", () => {
     expect(incidents[0]).toMatchObject({ id: "queue", severity: "critical" });
     expect(incidents[1]).toMatchObject({ id: "stockout", severity: "warning" });
   });
+
+  it("surfaces repeated price resistance", () => {
+    const snapshot = createStoreOperationsEngine(11).getSnapshot();
+    snapshot.kpis.priceRefusals = 4;
+    expect(detectStoreIncidents(snapshot)).toContainEqual(expect.objectContaining({
+      id: "price_resistance",
+      severity: "warning",
+    }));
+  });
 });

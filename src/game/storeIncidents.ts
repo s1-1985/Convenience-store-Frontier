@@ -3,7 +3,7 @@ import type { StoreOperationsSnapshot } from "./storeOperationsEngine.js";
 export type StoreIncidentSeverity = "warning" | "critical";
 
 export interface StoreIncident {
-  id: "queue" | "stockout" | "cleanliness" | "lost_sales";
+  id: "queue" | "stockout" | "price_resistance" | "cleanliness" | "lost_sales";
   severity: StoreIncidentSeverity;
   title: string;
   detail: string;
@@ -26,6 +26,14 @@ export function detectStoreIncidents(snapshot: StoreOperationsSnapshot): StoreIn
       severity: snapshot.kpis.stockoutEncounters >= 7 ? "critical" : "warning",
       title: "欠品が増加",
       detail: `${snapshot.kpis.stockoutEncounters}件。補充と発注方針を確認してください。`,
+    });
+  }
+  if (snapshot.kpis.priceRefusals >= 3) {
+    incidents.push({
+      id: "price_resistance",
+      severity: snapshot.kpis.priceRefusals >= 7 ? "critical" : "warning",
+      title: "価格への不満が増加",
+      detail: `${snapshot.kpis.priceRefusals}件。商品パネルで価格を見直してください。`,
     });
   }
   if (snapshot.litter.length >= 3) {

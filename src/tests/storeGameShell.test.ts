@@ -25,4 +25,12 @@ describe("store game shell controls", () => {
     expect(source).toContain('incident.severity === "critical"');
     expect(source).toContain('optional<HTMLButtonElement>("play-button")?.click()');
   });
+
+  it("offers category price controls in the product panel and canvas shelf tags", () => {
+    expect(source).toContain("data-price-category");
+    expect(source).toContain("setCategoryPrice");
+    expect(source).toContain("product-price-controls");
+    expect(source).toContain("drawShelfPriceTag");
+    expect(source).toContain("drawPixelArtStorefront");
+  });
 });
