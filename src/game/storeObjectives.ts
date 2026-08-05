@@ -3,7 +3,7 @@ import type { StoreOperationsSnapshot } from "./storeOperationsEngine.js";
 export type StoreObjectiveStatus = "active" | "completed" | "at_risk";
 
 export interface StoreObjective {
-  id: "sales" | "queue" | "stockout" | "cleanliness" | "regulars";
+  id: "sales" | "queue" | "stockout" | "price" | "cleanliness" | "regulars";
   label: string;
   progress: string;
   status: StoreObjectiveStatus;
@@ -20,6 +20,7 @@ export function buildStoreObjectives(snapshot: StoreOperationsSnapshot): StoreOb
   const salesComplete = snapshot.kpis.transactions >= salesTarget;
   const queueAtRisk = snapshot.queueCustomerIds.length >= 4 || snapshot.kpis.queueAbandonments > 0;
   const stockoutAtRisk = snapshot.kpis.stockoutEncounters >= 3;
+  const priceAtRisk = snapshot.kpis.priceRefusals >= 3;
   const dirty = snapshot.litter.length >= 3;
 
   return [
@@ -43,6 +44,13 @@ export function buildStoreObjectives(snapshot: StoreOperationsSnapshot): StoreOb
       progress: `${snapshot.kpis.stockoutEncounters}件`,
       status: stockoutAtRisk ? "at_risk" : hasTraffic ? "completed" : "active",
       advice: stockoutAtRisk ? "補充担当か発注方針を見直そう" : "売場在庫は安定",
+    },
+    {
+      id: "price",
+      label: "価格不満を2件以下に",
+      progress: `${snapshot.kpis.priceRefusals}件`,
+      status: priceAtRisk ? "at_risk" : hasTraffic ? "completed" : "active",
+      advice: priceAtRisk ? "商品メニューで価格を見直そう" : "価格への反応は良好",
     },
     {
       id: "cleanliness",

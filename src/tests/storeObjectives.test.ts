@@ -10,6 +10,7 @@ describe("live store objectives", () => {
       "sales",
       "queue",
       "stockout",
+      "price",
       "cleanliness",
       "regulars",
     ]);
@@ -28,5 +29,14 @@ describe("live store objectives", () => {
     expect(objectives.slice(0, 2).map((objective) => objective.id)).toEqual(["queue", "stockout"]);
     expect(objectives[0]?.advice).toContain("レジ担当");
     expect(objectives[1]?.advice).toContain("補充担当");
+  });
+
+  it("turns repeated price refusals into an actionable objective", () => {
+    const snapshot = createStoreOperationsEngine(12).getSnapshot();
+    snapshot.kpis.priceRefusals = 5;
+    expect(buildStoreObjectives(snapshot)).toContainEqual(expect.objectContaining({
+      id: "price",
+      status: "at_risk",
+    }));
   });
 });

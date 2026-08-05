@@ -337,6 +337,24 @@ body.store-game-mode #app {
   gap: 8px;
 }
 
+.product-price-controls {
+  display: grid;
+  grid-template-columns: 2.25rem 1fr 2.25rem;
+  align-items: center;
+  gap: 0.35rem;
+  margin: -0.35rem 0 0.2rem;
+}
+
+.product-price-controls output {
+  color: #ffe694;
+  font-weight: 800;
+  text-align: center;
+}
+
+.product-price-controls button {
+  min-height: 2rem;
+}
+
 .product-focus-grid button,
 .product-detail-button,
 .store-product-panel header button {
