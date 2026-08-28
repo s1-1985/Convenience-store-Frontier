@@ -466,6 +466,23 @@ body.store-game-mode #app {
   font-size: 12px;
 }
 
+.operations-pulse {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 7px 10px;
+  border: 1px solid #315e7d;
+  background: #082440;
+  color: #b9d3e3;
+  font-size: 11px;
+}
+
+.operations-pulse--warn {
+  color: #ffb5a8;
+  font-weight: 800;
+}
+
 .performance-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

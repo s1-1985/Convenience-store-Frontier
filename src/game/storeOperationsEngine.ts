@@ -159,6 +159,7 @@ export interface StoreOperationsSnapshot {
   serviceTrust: number;
   cash: number;
   categoryTiers: Record<StoreCategoryId, number>;
+  daysSincePolicyChange: number;
 }
 
 export interface SerializedStoreOperations extends StoreOperationsSnapshot {
@@ -609,6 +610,8 @@ export function createStoreOperationsEngine(
     ...(Object.fromEntries(CATEGORY_IDS.map((categoryId) => [categoryId, 0])) as Record<StoreCategoryId, number>),
     ...(restored?.categoryTiers ?? {}),
   };
+  let daysSincePolicyChange = restored?.daysSincePolicyChange ?? 0;
+  let changedSinceLastDay = false;
 
   function random(): number {
     let value = rngState | 0;
@@ -1120,6 +1123,8 @@ export function createStoreOperationsEngine(
       }
       const netIncome = kpis.revenue * (1 - ASSUMED_COST_RATIO) - DAILY_OPERATING_COST;
       cash = Math.max(0, cash + netIncome);
+      daysSincePolicyChange = changedSinceLastDay ? 0 : daysSincePolicyChange + 1;
+      changedSinceLastDay = false;
       day = nextDay;
       kpis = emptyKpis();
       spawnAccumulator = 0;
@@ -1130,20 +1135,24 @@ export function createStoreOperationsEngine(
     setStaffAssignments(nextAssignments: StoreStaffAssignments): void {
       assignments = normalizeAssignments(nextAssignments, lastRequestedStaffCount);
       syncStaffCount(lastRequestedStaffCount);
+      changedSinceLastDay = true;
     },
 
     setSupplyPolicy(nextOrdering: StoreOrderingPolicy, nextDelivery: StoreDeliveryPolicy): void {
       orderingPolicy = nextOrdering;
       deliveryPolicy = nextDelivery;
+      changedSinceLastDay = true;
     },
 
     setMerchandisingFocus(category?: StoreCategoryId): void {
       merchandisingFocus = category;
+      changedSinceLastDay = true;
     },
 
     setCategoryPrice(category: StoreCategoryId, nextPrice: number): void {
       const range = categoryPriceRange(category);
       inventories[category].price = clamp(Math.round(nextPrice / 10) * 10, range.min, range.max);
+      changedSinceLastDay = true;
     },
 
     investInCategoryCapacity(category: StoreCategoryId): { ok: boolean; message: string } {
@@ -1158,6 +1167,7 @@ export function createStoreOperationsEngine(
       cash -= investment.cost;
       categoryTiers[category] = tier + 1;
       inventories[category].shelfCapacity += investment.capacityBonus;
+      changedSinceLastDay = true;
       return { ok: true, message: "売場を拡張しました" };
     },
 
@@ -1178,6 +1188,7 @@ export function createStoreOperationsEngine(
         serviceTrust,
         cash,
         categoryTiers: { ...categoryTiers },
+        daysSincePolicyChange,
       };
     },
 

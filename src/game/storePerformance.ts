@@ -1,4 +1,4 @@
-import type { StoreOperationsSnapshot } from "./storeOperationsEngine.js";
+import type { StoreDailyResult, StoreOperationsSnapshot } from "./storeOperationsEngine.js";
 
 export interface StorePerformanceSummary {
   grade: "S" | "A" | "B" | "C" | "D";
@@ -47,4 +47,29 @@ export function summarizeStorePerformance(snapshot: StoreOperationsSnapshot): St
     return { grade, conversionRate, availabilityRate, serviceRate, cleanlinessRate, headline: "売場の清潔度が低下しています", nextAction: "清掃優先の店員を一人置こう。" };
   }
   return { grade, conversionRate, availabilityRate, serviceRate, cleanlinessRate, headline: "安定した店舗運営です", nextAction: "重点商品を選び、次の売上機会を作ろう。" };
+}
+
+export type StoreRevenueTrend = "improving" | "flat" | "declining" | "insufficient_data";
+
+const TREND_WINDOW = 3;
+const TREND_CHANGE_THRESHOLD = 0.08;
+
+/** Compares the average revenue of the most recent days against the days before them. */
+export function computeRevenueTrend(dailyHistory: readonly StoreDailyResult[]): StoreRevenueTrend {
+  const recent = dailyHistory.slice(-TREND_WINDOW);
+  const prior = dailyHistory.slice(-TREND_WINDOW * 2, -TREND_WINDOW);
+  if (recent.length < TREND_WINDOW || prior.length < TREND_WINDOW) {
+    return "insufficient_data";
+  }
+  const average = (list: readonly StoreDailyResult[]): number =>
+    list.reduce((sum, result) => sum + result.revenue, 0) / list.length;
+  const recentAverage = average(recent);
+  const priorAverage = average(prior);
+  if (priorAverage <= 0) {
+    return recentAverage > 0 ? "improving" : "flat";
+  }
+  const change = (recentAverage - priorAverage) / priorAverage;
+  if (change > TREND_CHANGE_THRESHOLD) return "improving";
+  if (change < -TREND_CHANGE_THRESHOLD) return "declining";
+  return "flat";
 }

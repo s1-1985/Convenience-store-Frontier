@@ -348,4 +348,36 @@ describe("individual store operations engine", () => {
     expect(snapshot.cash).toBeGreaterThan(0);
     expect(Object.values(snapshot.categoryTiers).every((tier) => tier === 0)).toBe(true);
   });
+
+  it("counts consecutive days without any policy action", () => {
+    const engine = createStoreOperationsEngine(401);
+    expect(engine.getSnapshot().daysSincePolicyChange).toBe(0);
+
+    engine.beginDay(2);
+    expect(engine.getSnapshot().daysSincePolicyChange).toBe(1);
+    engine.beginDay(3);
+    expect(engine.getSnapshot().daysSincePolicyChange).toBe(2);
+  });
+
+  it("resets the days-without-action counter after any policy setter is used", () => {
+    const engine = createStoreOperationsEngine(402);
+    engine.beginDay(2);
+    engine.beginDay(3);
+    expect(engine.getSnapshot().daysSincePolicyChange).toBe(2);
+
+    engine.setCategoryPrice("drinks", 160);
+    engine.beginDay(4);
+
+    expect(engine.getSnapshot().daysSincePolicyChange).toBe(0);
+  });
+
+  it("round-trips days-without-action through serialize/restore", () => {
+    const engine = createStoreOperationsEngine(403);
+    engine.beginDay(2);
+    engine.beginDay(3);
+
+    const restored = restoreStoreOperationsEngine(engine.serialize());
+
+    expect(restored.getSnapshot().daysSincePolicyChange).toBe(2);
+  });
 });
