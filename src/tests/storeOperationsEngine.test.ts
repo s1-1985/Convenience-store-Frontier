@@ -380,4 +380,53 @@ describe("individual store operations engine", () => {
 
     expect(restored.getSnapshot().daysSincePolicyChange).toBe(2);
   });
+
+  it("swaps the displayed category between two fixtures of the same kind", () => {
+    const engine = createStoreOperationsEngine(501);
+
+    const result = engine.swapFixtureCategories("snacks", "instant");
+
+    expect(result.ok).toBe(true);
+    const layout = engine.getLayout();
+    expect(layout.fixtures.find((f) => f.id === "snacks")?.categoryId).toBe("instant");
+    expect(layout.fixtures.find((f) => f.id === "instant")?.categoryId).toBe("snacks");
+  });
+
+  it("rejects swapping fixtures of different kinds", () => {
+    const engine = createStoreOperationsEngine(502);
+
+    const result = engine.swapFixtureCategories("snacks", "drinks");
+
+    expect(result.ok).toBe(false);
+    const layout = engine.getLayout();
+    expect(layout.fixtures.find((f) => f.id === "snacks")?.categoryId).toBe("snacks");
+    expect(layout.fixtures.find((f) => f.id === "drinks")?.categoryId).toBe("drinks");
+  });
+
+  it("rejects swapping a fixture that has no category, such as the register", () => {
+    const engine = createStoreOperationsEngine(503);
+
+    const result = engine.swapFixtureCategories("snacks", "register");
+
+    expect(result.ok).toBe(false);
+  });
+
+  it("rejects swapping unknown fixtures or a fixture with itself", () => {
+    const engine = createStoreOperationsEngine(504);
+
+    expect(engine.swapFixtureCategories("snacks", "snacks").ok).toBe(false);
+    expect(engine.swapFixtureCategories("snacks", "does-not-exist").ok).toBe(false);
+  });
+
+  it("resets the days-without-action counter after a category swap", () => {
+    const engine = createStoreOperationsEngine(505);
+    engine.beginDay(2);
+    engine.beginDay(3);
+    expect(engine.getSnapshot().daysSincePolicyChange).toBe(2);
+
+    engine.swapFixtureCategories("snacks", "instant");
+    engine.beginDay(4);
+
+    expect(engine.getSnapshot().daysSincePolicyChange).toBe(0);
+  });
 });

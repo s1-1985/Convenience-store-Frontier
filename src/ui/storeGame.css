@@ -432,6 +432,34 @@ body.store-game-mode #app {
   color: #7f97a8;
 }
 
+.fixture-swap-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.fixture-swap-grid button {
+  min-height: 52px;
+  border: 2px solid #e4ad3e;
+  border-radius: 8px;
+  background: linear-gradient(#174e80, #0a3156);
+  color: #fff4cf;
+  font-weight: 900;
+}
+
+.fixture-swap-grid button small {
+  display: block;
+  margin-top: 3px;
+  color: #b9d3e3;
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.fixture-swap-grid button[aria-pressed="true"] {
+  background: linear-gradient(#33915f, #17643d);
+  box-shadow: inset 0 0 0 2px rgba(255,255,255,.18);
+}
+
 .performance-summary {
   display: grid;
   grid-template-columns: 76px 1fr;

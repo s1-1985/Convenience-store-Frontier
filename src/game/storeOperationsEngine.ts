@@ -187,6 +187,7 @@ export interface StoreOperationsEngine {
   setMerchandisingFocus(category?: StoreCategoryId): void;
   setCategoryPrice(category: StoreCategoryId, price: number): void;
   investInCategoryCapacity(category: StoreCategoryId): { ok: boolean; message: string };
+  swapFixtureCategories(fixtureIdA: string, fixtureIdB: string): { ok: boolean; message: string };
   getSnapshot(): StoreOperationsSnapshot;
   getLayout(): StoreLayout;
   serialize(): SerializedStoreOperations;
@@ -1169,6 +1170,28 @@ export function createStoreOperationsEngine(
       inventories[category].shelfCapacity += investment.capacityBonus;
       changedSinceLastDay = true;
       return { ok: true, message: "売場を拡張しました" };
+    },
+
+    swapFixtureCategories(fixtureIdA: string, fixtureIdB: string): { ok: boolean; message: string } {
+      if (fixtureIdA === fixtureIdB) {
+        return { ok: false, message: "同じ什器は入れ替えられません" };
+      }
+      const fixtureA = layout.fixtures.find((fixture) => fixture.id === fixtureIdA);
+      const fixtureB = layout.fixtures.find((fixture) => fixture.id === fixtureIdB);
+      if (!fixtureA || !fixtureB) {
+        return { ok: false, message: "什器が見つかりません" };
+      }
+      if (!fixtureA.categoryId || !fixtureB.categoryId) {
+        return { ok: false, message: "この什器には陳列カテゴリがありません" };
+      }
+      if (fixtureA.kind !== fixtureB.kind) {
+        return { ok: false, message: "常温什器と冷蔵ケースの間では入れ替えられません" };
+      }
+      const categoryA = fixtureA.categoryId;
+      fixtureA.categoryId = fixtureB.categoryId;
+      fixtureB.categoryId = categoryA;
+      changedSinceLastDay = true;
+      return { ok: true, message: "陳列カテゴリを入れ替えました" };
     },
 
     getSnapshot(): StoreOperationsSnapshot {

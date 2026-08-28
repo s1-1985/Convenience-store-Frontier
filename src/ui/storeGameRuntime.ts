@@ -9,6 +9,7 @@ import {
   type StoreCategoryId,
   type StoreCustomerAgent,
   type StoreEngineContext,
+  type FixtureKind,
   type StoreFixture,
   type StoreLayout,
   type StoreOperationsEngine,
@@ -598,6 +599,10 @@ function buildShell(): HTMLElement {
       <p>資金を投じて棚を拡張すると、そのカテゴリーの陳列数と補充目標が増えます。</p>
       <p class="investment-message" data-investment-message></p>
       <div class="product-investment-grid"></div>
+      <h3>陳列替え</h3>
+      <p>什器を2つ選ぶと、陳列しているカテゴリーを入れ替えられます。常温什器同士・冷蔵ケース同士のみ入れ替え可能です。</p>
+      <p class="investment-message" data-swap-message></p>
+      <div class="fixture-swap-grid"></div>
     </section>
     <section class="store-info-panel" id="store-info-panel" hidden>
       <header><strong>店舗情報</strong><button type="button" data-close-info>閉じる</button></header>
@@ -741,7 +746,9 @@ function renderSupplyPanel(panel: HTMLElement, snapshot: StoreOperationsSnapshot
   });
 }
 
-function renderProductPanel(panel: HTMLElement, snapshot: StoreOperationsSnapshot): void {
+let selectedSwapFixtureId: string | undefined;
+
+function renderProductPanel(panel: HTMLElement, snapshot: StoreOperationsSnapshot, layout: StoreLayout): void {
   const grid = panel.querySelector<HTMLElement>(".product-focus-grid");
   if (!grid) return;
   grid.replaceChildren();
@@ -763,6 +770,29 @@ function renderProductPanel(panel: HTMLElement, snapshot: StoreOperationsSnapsho
     grid.append(priceControls);
   }
   renderInvestmentGrid(panel, snapshot);
+  renderFixtureSwapGrid(panel, layout);
+}
+
+const FIXTURE_KIND_LABELS: Partial<Record<FixtureKind, string>> = {
+  shelf: "常温什器",
+  cold_case: "冷蔵ケース",
+};
+
+function renderFixtureSwapGrid(panel: HTMLElement, layout: StoreLayout): void {
+  const grid = panel.querySelector<HTMLElement>(".fixture-swap-grid");
+  if (!grid) return;
+  grid.replaceChildren();
+  const swappable = layout.fixtures.filter((fixture) => fixture.categoryId !== undefined);
+  for (const fixture of swappable) {
+    const categoryId = fixture.categoryId;
+    if (!categoryId) continue;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.swapFixture = fixture.id;
+    button.setAttribute("aria-pressed", String(selectedSwapFixtureId === fixture.id));
+    button.innerHTML = `<strong>${CATEGORY_LABELS[categoryId]}</strong><small>${FIXTURE_KIND_LABELS[fixture.kind] ?? fixture.kind}</small>`;
+    grid.append(button);
+  }
 }
 
 function renderInvestmentGrid(panel: HTMLElement, snapshot: StoreOperationsSnapshot): void {
@@ -1000,7 +1030,7 @@ function bindNavigation(
       if (!category) return;
       const snapshot = getEngine().getSnapshot();
       getEngine().setMerchandisingFocus(snapshot.merchandisingFocus === category ? undefined : category);
-      renderProductPanel(productPanel, getEngine().getSnapshot());
+      renderProductPanel(productPanel, getEngine().getSnapshot(), getEngine().getLayout());
       saveEngine(getEngine());
       return;
     }
@@ -1011,7 +1041,7 @@ function bindNavigation(
       if (!category || !Number.isFinite(delta)) return;
       const inventory = getEngine().getSnapshot().inventories[category];
       getEngine().setCategoryPrice(category, inventory.price + delta);
-      renderProductPanel(productPanel, getEngine().getSnapshot());
+      renderProductPanel(productPanel, getEngine().getSnapshot(), getEngine().getLayout());
       saveEngine(getEngine());
       return;
     }
@@ -1022,8 +1052,28 @@ function bindNavigation(
       const result = getEngine().investInCategoryCapacity(category);
       const message = productPanel.querySelector<HTMLElement>("[data-investment-message]");
       if (message) message.textContent = result.message;
-      renderProductPanel(productPanel, getEngine().getSnapshot());
+      renderProductPanel(productPanel, getEngine().getSnapshot(), getEngine().getLayout());
       saveEngine(getEngine());
+      return;
+    }
+    const swapButton = target?.closest<HTMLButtonElement>("[data-swap-fixture]");
+    if (swapButton && productPanel) {
+      const fixtureId = swapButton.dataset.swapFixture;
+      if (!fixtureId) return;
+      const message = productPanel.querySelector<HTMLElement>("[data-swap-message]");
+      if (!selectedSwapFixtureId) {
+        selectedSwapFixtureId = fixtureId;
+        if (message) message.textContent = "入れ替え先の什器を選んでください";
+      } else if (selectedSwapFixtureId === fixtureId) {
+        selectedSwapFixtureId = undefined;
+        if (message) message.textContent = "";
+      } else {
+        const result = getEngine().swapFixtureCategories(selectedSwapFixtureId, fixtureId);
+        selectedSwapFixtureId = undefined;
+        if (message) message.textContent = result.message;
+        saveEngine(getEngine());
+      }
+      renderProductPanel(productPanel, getEngine().getSnapshot(), getEngine().getLayout());
       return;
     }
     const timeCommand = target?.closest<HTMLButtonElement>("[data-time-command]");
@@ -1103,7 +1153,7 @@ function bindNavigation(
       return;
     }
     if (action === "product" && productPanel) {
-      renderProductPanel(productPanel, getEngine().getSnapshot());
+      renderProductPanel(productPanel, getEngine().getSnapshot(), getEngine().getLayout());
       productPanel.hidden = !productPanel.hidden;
       return;
     }
