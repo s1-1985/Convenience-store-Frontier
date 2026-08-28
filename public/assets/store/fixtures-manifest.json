@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "cell": { "width": 384, "height": 256 },
+  "fixtureBases": {
+    "ambient_gondola": { "atlas": "fixture-bases.svg", "index": 0, "accepts": ["magazines", "snacks", "instant", "daily_goods"] },
+    "refrigerated_case": { "atlas": "fixture-bases.svg", "index": 1, "accepts": ["drinks", "dessert", "ready_meal"] }
+  },
+  "merchandise": {
+    "drinks": { "atlas": "merchandise.svg", "index": 0, "fixtureBase": "refrigerated_case" },
+    "dessert": { "atlas": "merchandise.svg", "index": 1, "fixtureBase": "refrigerated_case" },
+    "ready_meal": { "atlas": "merchandise.svg", "index": 2, "fixtureBase": "refrigerated_case" },
+    "magazines": { "atlas": "merchandise.svg", "index": 3, "fixtureBase": "ambient_gondola" },
+    "snacks": { "atlas": "merchandise.svg", "index": 4, "fixtureBase": "ambient_gondola" },
+    "instant": { "atlas": "merchandise.svg", "index": 5, "fixtureBase": "ambient_gondola" },
+    "daily_goods": { "atlas": "merchandise.svg", "index": 6, "fixtureBase": "ambient_gondola" }
+  },
+  "stockStates": { "empty": 0, "low": 0.34, "normal": 0.67, "full": 1 }
+}
