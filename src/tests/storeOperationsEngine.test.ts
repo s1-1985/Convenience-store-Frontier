@@ -5,7 +5,9 @@ import {
   createStoreOperationsEngine,
   defaultCategoryWeightsForHour,
   findStorePath,
+  maxShelfTier,
   restoreStoreOperationsEngine,
+  type SerializedStoreOperations,
   type StoreEngineContext,
   type StoreCategoryId,
   type StoreOperationsEngine,
@@ -253,5 +255,97 @@ describe("individual store operations engine", () => {
     expect(snapshot.kpis.regularVisits).toBeGreaterThan(0);
     expect(snapshot.kpis.regularTransactions).toBeGreaterThan(0);
     expect(snapshot.kpis.regularTransactions).toBeLessThanOrEqual(snapshot.kpis.regularVisits);
+  });
+
+  it("accrues cash from the completed day's revenue at day rollover", () => {
+    const engine = createStoreOperationsEngine(301);
+    const initialCash = engine.getSnapshot().cash;
+    engine.setStaffAssignments({ register: 3, replenishment: 0, cleaning: 0 });
+    run(engine, 160, context({ requestedStaffCount: 3, arrivalRatePerMinute: 12 }));
+    expect(engine.getSnapshot().kpis.revenue).toBeGreaterThan(0);
+
+    engine.beginDay(2);
+
+    expect(engine.getSnapshot().cash).not.toBe(initialCash);
+  });
+
+  it("still deducts a daily operating cost when the store has no sales", () => {
+    const engine = createStoreOperationsEngine(302);
+    const cash0 = engine.getSnapshot().cash;
+    engine.beginDay(2);
+    const cash1 = engine.getSnapshot().cash;
+    engine.beginDay(3);
+    const cash2 = engine.getSnapshot().cash;
+
+    expect(cash1).toBeLessThan(cash0);
+    expect(cash1 - cash2).toBeCloseTo(cash0 - cash1, 5);
+  });
+
+  it("invests in shelf capacity, deducting cash and raising the category's shelf capacity", () => {
+    const engine = createStoreOperationsEngine(303);
+    const before = engine.getSnapshot();
+    const capacityBefore = before.inventories.drinks.shelfCapacity;
+    const cashBefore = before.cash;
+
+    const result = engine.investInCategoryCapacity("drinks");
+
+    expect(result.ok).toBe(true);
+    const after = engine.getSnapshot();
+    expect(after.cash).toBeLessThan(cashBefore);
+    expect(after.inventories.drinks.shelfCapacity).toBeGreaterThan(capacityBefore);
+    expect(after.categoryTiers.drinks).toBe(1);
+  });
+
+  it("fails to invest when cash is insufficient and leaves state unchanged", () => {
+    const source = createStoreOperationsEngine(304).serialize();
+    source.cash = 0;
+    const engine = restoreStoreOperationsEngine(source);
+    const capacityBefore = engine.getSnapshot().inventories.drinks.shelfCapacity;
+
+    const result = engine.investInCategoryCapacity("drinks");
+
+    expect(result.ok).toBe(false);
+    expect(engine.getSnapshot().cash).toBe(0);
+    expect(engine.getSnapshot().categoryTiers.drinks).toBe(0);
+    expect(engine.getSnapshot().inventories.drinks.shelfCapacity).toBe(capacityBefore);
+  });
+
+  it("fails to invest once a category reaches the maximum tier", () => {
+    const source = createStoreOperationsEngine(305).serialize();
+    source.cash = 10_000_000;
+    const engine = restoreStoreOperationsEngine(source);
+
+    let lastResult: { ok: boolean; message: string } | undefined;
+    for (let attempt = 0; attempt < maxShelfTier() + 1; attempt += 1) {
+      lastResult = engine.investInCategoryCapacity("drinks");
+    }
+
+    expect(engine.getSnapshot().categoryTiers.drinks).toBe(maxShelfTier());
+    expect(lastResult?.ok).toBe(false);
+  });
+
+  it("round-trips cash and category tiers through serialize/restore", () => {
+    const engine = createStoreOperationsEngine(306);
+    engine.investInCategoryCapacity("snacks");
+    const before = engine.getSnapshot();
+
+    const restored = restoreStoreOperationsEngine(engine.serialize());
+    const after = restored.getSnapshot();
+
+    expect(after.cash).toBe(before.cash);
+    expect(after.categoryTiers).toEqual(before.categoryTiers);
+  });
+
+  it("falls back to default cash and tiers when restoring a save from before this feature existed", () => {
+    const source = createStoreOperationsEngine(307).serialize() as Partial<SerializedStoreOperations>;
+    delete source.cash;
+    delete source.categoryTiers;
+
+    const engine = restoreStoreOperationsEngine(source as SerializedStoreOperations);
+    const snapshot = engine.getSnapshot();
+
+    expect(Number.isFinite(snapshot.cash)).toBe(true);
+    expect(snapshot.cash).toBeGreaterThan(0);
+    expect(Object.values(snapshot.categoryTiers).every((tier) => tier === 0)).toBe(true);
   });
 });

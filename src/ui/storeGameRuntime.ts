@@ -2,6 +2,8 @@ import {
   categoryPriceRange,
   createStoreOperationsEngine,
   defaultCategoryWeightsForHour,
+  maxShelfTier,
+  nextCapacityInvestment,
   restoreStoreOperationsEngine,
   type SerializedStoreOperations,
   type StoreCategoryId,
@@ -465,7 +467,7 @@ function drawHud(context: CanvasRenderingContext2D, snapshot: StoreOperationsSna
   drawStatusCard(context, 105, 94, "営業日", `${currentDay()}日目`);
   drawStatusCard(context, 205, 113, "時刻", optional("time-label")?.textContent ?? "06:00", 0);
   drawStatusCard(context, 324, 136, "天気", optional("weather-label")?.textContent ?? "晴れ", 7);
-  drawStatusCard(context, 466, 232, "所持金", optional("cash-label")?.textContent ?? "—", 6);
+  drawStatusCard(context, 466, 232, "所持金", `¥${snapshot.cash.toLocaleString("ja-JP")}`, 6);
   drawStatusCard(context, 704, 174, "店内売上", `¥${snapshot.kpis.revenue.toLocaleString("ja-JP")}`, 5);
   const status = isStoreOpen() ? (isPlaying() ? "営業中" : "一時停止") : "営業時間外";
   drawStatusCard(context, 884, 188, "営業状態", status, undefined, isStoreOpen() ? "#fff4cf" : "#ffb5a8");
@@ -592,6 +594,10 @@ function buildShell(): HTMLElement {
       <p>重点カテゴリーはお客の注目を集め、補充時にも少し優先されます。</p>
       <div class="product-focus-grid"></div>
       <button type="button" class="product-detail-button" data-open-product-detail>売場面積を詳しく設定</button>
+      <h3>設備投資</h3>
+      <p>資金を投じて棚を拡張すると、そのカテゴリーの陳列数と補充目標が増えます。</p>
+      <p class="investment-message" data-investment-message></p>
+      <div class="product-investment-grid"></div>
     </section>
     <section class="store-info-panel" id="store-info-panel" hidden>
       <header><strong>店舗情報</strong><button type="button" data-close-info>閉じる</button></header>
@@ -751,6 +757,37 @@ function renderProductPanel(panel: HTMLElement, snapshot: StoreOperationsSnapsho
       <output>¥${inventory.price.toLocaleString("ja-JP")}</output>
       <button type="button" data-price-category="${categoryId}" data-price-delta="10" ${inventory.price >= priceRange.max ? "disabled" : ""}>＋</button>`;
     grid.append(priceControls);
+  }
+  renderInvestmentGrid(panel, snapshot);
+}
+
+function renderInvestmentGrid(panel: HTMLElement, snapshot: StoreOperationsSnapshot): void {
+  const grid = panel.querySelector<HTMLElement>(".product-investment-grid");
+  if (!grid) return;
+  grid.replaceChildren();
+  const maxTier = maxShelfTier();
+  for (const categoryId of Object.keys(CATEGORY_LABELS) as StoreCategoryId[]) {
+    const inventory = snapshot.inventories[categoryId];
+    const tier = snapshot.categoryTiers[categoryId] ?? 0;
+    const investment = nextCapacityInvestment(tier);
+    const row = document.createElement("div");
+    row.className = "product-investment-row";
+    const tierLabel = `拡張 ${tier}/${maxTier}`;
+    if (investment) {
+      const affordable = snapshot.cash >= investment.cost;
+      row.innerHTML = `
+        <strong>${CATEGORY_LABELS[categoryId]}</strong>
+        <span>棚容量 ${inventory.shelfCapacity}<small>(+${investment.capacityBonus})</small></span>
+        <small>${tierLabel}</small>
+        <button type="button" data-invest-category="${categoryId}" ${affordable ? "" : "disabled"}>¥${investment.cost.toLocaleString("ja-JP")}で拡張</button>`;
+    } else {
+      row.innerHTML = `
+        <strong>${CATEGORY_LABELS[categoryId]}</strong>
+        <span>棚容量 ${inventory.shelfCapacity}</span>
+        <small>${tierLabel}</small>
+        <button type="button" disabled>拡張済み</button>`;
+    }
+    grid.append(row);
   }
 }
 
@@ -949,6 +986,17 @@ function bindNavigation(
       if (!category || !Number.isFinite(delta)) return;
       const inventory = getEngine().getSnapshot().inventories[category];
       getEngine().setCategoryPrice(category, inventory.price + delta);
+      renderProductPanel(productPanel, getEngine().getSnapshot());
+      saveEngine(getEngine());
+      return;
+    }
+    const investButton = target?.closest<HTMLButtonElement>("[data-invest-category]");
+    if (investButton && productPanel) {
+      const category = investButton.dataset.investCategory as StoreCategoryId | undefined;
+      if (!category) return;
+      const result = getEngine().investInCategoryCapacity(category);
+      const message = productPanel.querySelector<HTMLElement>("[data-investment-message]");
+      if (message) message.textContent = result.message;
       renderProductPanel(productPanel, getEngine().getSnapshot());
       saveEngine(getEngine());
       return;
