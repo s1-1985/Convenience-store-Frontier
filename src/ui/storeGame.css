@@ -385,6 +385,53 @@ body.store-game-mode #app {
   margin-top: 12px;
 }
 
+.investment-message {
+  min-height: 1em;
+  margin: 8px 0 0;
+  color: #ffe694;
+  font-size: 12px;
+}
+
+.product-investment-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.product-investment-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 2px solid #e4ad3e;
+  border-radius: 8px;
+  background: linear-gradient(#174e80, #0a3156);
+  color: #fff4cf;
+}
+
+.product-investment-row span,
+.product-investment-row small {
+  color: #b9d3e3;
+  font-size: 11px;
+}
+
+.product-investment-row button {
+  min-height: 2rem;
+  padding: 0 0.6rem;
+  border: 2px solid #e4ad3e;
+  border-radius: 6px;
+  background: linear-gradient(#33915f, #17643d);
+  color: #fff4cf;
+  font-weight: 800;
+  font-size: 11px;
+}
+
+.product-investment-row button:disabled {
+  background: #2a3d4d;
+  border-color: #45607a;
+  color: #7f97a8;
+}
+
 .performance-summary {
   display: grid;
   grid-template-columns: 76px 1fr;

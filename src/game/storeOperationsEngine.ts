@@ -157,6 +157,8 @@ export interface StoreOperationsSnapshot {
   merchandisingFocus?: StoreCategoryId;
   dailyHistory: StoreDailyResult[];
   serviceTrust: number;
+  cash: number;
+  categoryTiers: Record<StoreCategoryId, number>;
 }
 
 export interface SerializedStoreOperations extends StoreOperationsSnapshot {
@@ -183,6 +185,7 @@ export interface StoreOperationsEngine {
   setSupplyPolicy(ordering: StoreOrderingPolicy, delivery: StoreDeliveryPolicy): void;
   setMerchandisingFocus(category?: StoreCategoryId): void;
   setCategoryPrice(category: StoreCategoryId, price: number): void;
+  investInCategoryCapacity(category: StoreCategoryId): { ok: boolean; message: string };
   getSnapshot(): StoreOperationsSnapshot;
   getLayout(): StoreLayout;
   serialize(): SerializedStoreOperations;
@@ -214,6 +217,29 @@ export function categoryPriceRange(category: StoreCategoryId): { min: number; ma
     min: Math.ceil(basePrice * 0.7 / 10) * 10,
     max: Math.floor(basePrice * 1.5 / 10) * 10,
   };
+}
+
+const INITIAL_CASH = 300_000;
+// No per-unit cost tracking exists yet in this engine (only gross revenue),
+// so day-end profit is approximated from revenue alone.
+const ASSUMED_COST_RATIO = 0.6;
+const DAILY_OPERATING_COST = 8_000;
+const SHELF_TIER_CAPACITY_BONUS = 6;
+const SHELF_TIER_COSTS = [40_000, 90_000, 160_000];
+const MAX_SHELF_TIER = SHELF_TIER_COSTS.length;
+
+export interface NextCapacityInvestment {
+  cost: number;
+  capacityBonus: number;
+}
+
+export function nextCapacityInvestment(tier: number): NextCapacityInvestment | undefined {
+  if (tier >= MAX_SHELF_TIER) return undefined;
+  return { cost: SHELF_TIER_COSTS[tier]!, capacityBonus: SHELF_TIER_CAPACITY_BONUS };
+}
+
+export function maxShelfTier(): number {
+  return MAX_SHELF_TIER;
 }
 
 const CUSTOMER_MOVE_SPEED = 3.2;
@@ -578,6 +604,11 @@ export function createStoreOperationsEngine(
     regularTransactions: result.regularTransactions ?? 0,
   })) ?? [];
   let serviceTrust = clamp(restored?.serviceTrust ?? 0.35, 0, 1);
+  let cash = restored?.cash ?? INITIAL_CASH;
+  let categoryTiers: Record<StoreCategoryId, number> = {
+    ...(Object.fromEntries(CATEGORY_IDS.map((categoryId) => [categoryId, 0])) as Record<StoreCategoryId, number>),
+    ...(restored?.categoryTiers ?? {}),
+  };
 
   function random(): number {
     let value = rngState | 0;
@@ -1087,6 +1118,8 @@ export function createStoreOperationsEngine(
         });
         dailyHistory = dailyHistory.slice(-14);
       }
+      const netIncome = kpis.revenue * (1 - ASSUMED_COST_RATIO) - DAILY_OPERATING_COST;
+      cash = Math.max(0, cash + netIncome);
       day = nextDay;
       kpis = emptyKpis();
       spawnAccumulator = 0;
@@ -1113,6 +1146,21 @@ export function createStoreOperationsEngine(
       inventories[category].price = clamp(Math.round(nextPrice / 10) * 10, range.min, range.max);
     },
 
+    investInCategoryCapacity(category: StoreCategoryId): { ok: boolean; message: string } {
+      const tier = categoryTiers[category];
+      const investment = nextCapacityInvestment(tier);
+      if (!investment) {
+        return { ok: false, message: "これ以上拡張できません" };
+      }
+      if (cash < investment.cost) {
+        return { ok: false, message: `資金が不足しています(必要 ¥${investment.cost.toLocaleString("ja-JP")})` };
+      }
+      cash -= investment.cost;
+      categoryTiers[category] = tier + 1;
+      inventories[category].shelfCapacity += investment.capacityBonus;
+      return { ok: true, message: "売場を拡張しました" };
+    },
+
     getSnapshot(): StoreOperationsSnapshot {
       return {
         day,
@@ -1128,6 +1176,8 @@ export function createStoreOperationsEngine(
         merchandisingFocus,
         dailyHistory: dailyHistory.map((result) => ({ ...result })),
         serviceTrust,
+        cash,
+        categoryTiers: { ...categoryTiers },
       };
     },
 
