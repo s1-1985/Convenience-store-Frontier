@@ -27,7 +27,7 @@ import {
   type StoreStaffPreset,
 } from "../game/storeStaffing.js";
 import { recommendSupplyPolicy } from "../game/storeSupplyAdvisor.js";
-import { summarizeStorePerformance } from "../game/storePerformance.js";
+import { computeRevenueTrend, summarizeStorePerformance } from "../game/storePerformance.js";
 import { detectStoreIncidents } from "../game/storeIncidents.js";
 import {
   createStoreLayoutEditorUi,
@@ -605,6 +605,10 @@ function buildShell(): HTMLElement {
         <strong class="performance-grade" data-performance-grade>B</strong>
         <div><b data-performance-headline>営業準備中</b><span data-performance-action></span></div>
       </div>
+      <div class="operations-pulse">
+        <span data-days-since-change></span>
+        <span data-revenue-trend></span>
+      </div>
       <div class="performance-grid"></div>
       <div class="daily-history" data-daily-history></div>
       <button type="button" class="info-detail-button" data-open-info-detail>日報・地域・競合レポートを見る</button>
@@ -799,6 +803,27 @@ function renderInfoPanel(panel: HTMLElement, snapshot: StoreOperationsSnapshot):
   if (grade) grade.textContent = summary.grade;
   if (headline) headline.textContent = summary.headline;
   if (action) action.textContent = summary.nextAction;
+
+  const daysSinceChange = panel.querySelector<HTMLElement>("[data-days-since-change]");
+  if (daysSinceChange) {
+    daysSinceChange.textContent = snapshot.daysSincePolicyChange <= 0
+      ? "本日操作あり"
+      : `未操作 ${snapshot.daysSincePolicyChange}日`;
+    daysSinceChange.classList.toggle("operations-pulse--warn", snapshot.daysSincePolicyChange >= 5);
+  }
+  const revenueTrend = panel.querySelector<HTMLElement>("[data-revenue-trend]");
+  if (revenueTrend) {
+    const trend = computeRevenueTrend(snapshot.dailyHistory);
+    const trendLabel: Record<typeof trend, string> = {
+      improving: "業績 改善傾向 ↑",
+      flat: "業績 横ばい →",
+      declining: "業績 悪化傾向 ↓",
+      insufficient_data: "業績 傾向データ不足",
+    };
+    revenueTrend.textContent = trendLabel[trend];
+    revenueTrend.classList.toggle("operations-pulse--warn", trend === "declining");
+  }
+
   const percent = (value: number): string => `${Math.round(value * 100)}%`;
   const grid = panel.querySelector<HTMLElement>(".performance-grid");
   if (grid) {
