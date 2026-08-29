@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   resolveAgentFacing,
   resolveFixtureArtIndex,
+  resolveFixtureStockState,
+  resolveMerchandiseArtIndex,
   STORE_ART_ATLAS_SPEC,
 } from "../ui/storeArtAssets.js";
 import { createDefaultStoreLayout, createStoreOperationsEngine } from "../game/storeOperationsEngine.js";
@@ -29,6 +31,34 @@ describe("store art asset mapping", () => {
     expect(fixture).toBeDefined();
     snapshot.inventories.snacks.shelfUnits = 0;
     expect(resolveFixtureArtIndex(fixture!, snapshot)).toBe(11);
+  });
+
+  it("maps inventory ratios to composited merchandise states", () => {
+    const fixture = createDefaultStoreLayout().fixtures.find((candidate) => candidate.id === "snacks")!;
+    const snapshot = createStoreOperationsEngine(1977).getSnapshot();
+    const inventory = snapshot.inventories.snacks;
+    inventory.shelfUnits = inventory.shelfCapacity;
+    expect(resolveFixtureStockState(fixture, snapshot)).toBe("full");
+    inventory.shelfUnits = Math.floor(inventory.shelfCapacity / 2);
+    expect(resolveFixtureStockState(fixture, snapshot)).toBe("normal");
+    inventory.shelfUnits = 1;
+    expect(resolveFixtureStockState(fixture, snapshot)).toBe("low");
+    inventory.shelfUnits = 0;
+    expect(resolveFixtureStockState(fixture, snapshot)).toBe("empty");
+  });
+
+  it("selects a complete merchandise cell for every category and stock state", () => {
+    const fixture = createDefaultStoreLayout().fixtures.find((candidate) => candidate.id === "snacks")!;
+    const snapshot = createStoreOperationsEngine(1977).getSnapshot();
+    const inventory = snapshot.inventories.snacks;
+    inventory.shelfUnits = 0;
+    expect(resolveMerchandiseArtIndex(fixture, snapshot)).toBe(4);
+    inventory.shelfUnits = 1;
+    expect(resolveMerchandiseArtIndex(fixture, snapshot)).toBe(11);
+    inventory.shelfUnits = Math.floor(inventory.shelfCapacity / 2);
+    expect(resolveMerchandiseArtIndex(fixture, snapshot)).toBe(18);
+    inventory.shelfUnits = inventory.shelfCapacity;
+    expect(resolveMerchandiseArtIndex(fixture, snapshot)).toBe(25);
   });
 
   it("selects direction from the next path tile", () => {

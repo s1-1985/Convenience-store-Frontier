@@ -9,6 +9,8 @@ import type {
 
 export interface StoreArtAssets {
   fixtures: HTMLImageElement;
+  fixtureBases: HTMLImageElement;
+  merchandise: HTMLImageElement;
   staff: HTMLImageElement;
   customers: HTMLImageElement;
   icons: HTMLImageElement;
@@ -41,6 +43,7 @@ const STAFF_CELL_HEIGHT = 256;
 const CUSTOMER_CELL_WIDTH = 160;
 const CUSTOMER_CELL_HEIGHT = 220;
 const ICON_CELL_SIZE = 128;
+const FIXTURE_BASE_COLUMNS = 2;
 
 const FIXTURE_INDEX: Record<string, number> = {
   entrance: 0,
@@ -74,6 +77,8 @@ const CUSTOMER_ROWS = [0, 1, 2, 3, 4, 5] as const;
 
 const ASSET_URLS = {
   fixtures: "/assets/store/fixtures.svg",
+  fixtureBases: "/assets/store/fixture-bases.svg",
+  merchandise: "/assets/store/merchandise.svg",
   staff: "/assets/store/staff.svg",
   customers: "/assets/store/customers.svg",
   icons: "/assets/store/icons.svg",
@@ -93,13 +98,15 @@ function loadImage(url: string): Promise<HTMLImageElement> {
 
 export async function loadStoreArtAssets(): Promise<StoreArtAssets | undefined> {
   try {
-    const [fixtures, staff, customers, icons] = await Promise.all([
+    const [fixtures, fixtureBases, merchandise, staff, customers, icons] = await Promise.all([
       loadImage(ASSET_URLS.fixtures),
+      loadImage(ASSET_URLS.fixtureBases),
+      loadImage(ASSET_URLS.merchandise),
       loadImage(ASSET_URLS.staff),
       loadImage(ASSET_URLS.customers),
       loadImage(ASSET_URLS.icons),
     ]);
-    return { fixtures, staff, customers, icons };
+    return { fixtures, fixtureBases, merchandise, staff, customers, icons };
   } catch (error) {
     console.warn(error);
     return undefined;
@@ -139,6 +146,49 @@ export function resolveFixtureArtIndex(
   const inventory = snapshot?.inventories[fixture.categoryId];
   if (fixture.kind === "shelf" && inventory && inventory.shelfUnits <= 0) return FIXTURE_INDEX.empty;
   return FIXTURE_INDEX[fixture.categoryId];
+}
+
+const MERCHANDISE_INDEX: Record<string, number> = {
+  drinks: 0,
+  dessert: 1,
+  ready_meal: 2,
+  magazines: 3,
+  snacks: 4,
+  instant: 5,
+  daily_goods: 6,
+};
+
+export type FixtureStockState = "empty" | "low" | "normal" | "full";
+
+const FIXTURE_STOCK_ROW: Record<FixtureStockState, number> = {
+  empty: 0,
+  low: 1,
+  normal: 2,
+  full: 3,
+};
+
+export function resolveFixtureStockState(
+  fixture: StoreFixture,
+  snapshot: StoreOperationsSnapshot,
+): FixtureStockState | undefined {
+  if (!fixture.categoryId) return undefined;
+  const inventory = snapshot.inventories[fixture.categoryId];
+  const ratio = inventory.shelfCapacity > 0 ? inventory.shelfUnits / inventory.shelfCapacity : 0;
+  if (ratio <= 0) return "empty";
+  if (ratio < 0.34) return "low";
+  if (ratio < 0.67) return "normal";
+  return "full";
+}
+
+export function resolveMerchandiseArtIndex(
+  fixture: StoreFixture,
+  snapshot: StoreOperationsSnapshot,
+): number | undefined {
+  if (!fixture.categoryId) return undefined;
+  const categoryIndex = MERCHANDISE_INDEX[fixture.categoryId];
+  const state = resolveFixtureStockState(fixture, snapshot);
+  if (categoryIndex === undefined || state === undefined) return undefined;
+  return FIXTURE_STOCK_ROW[state] * 7 + categoryIndex;
 }
 
 function drawAtlasCell(
@@ -207,33 +257,37 @@ export function drawFixtureArtwork(
 
   context.save();
   context.imageSmoothingEnabled = false;
+  const isMerchandiseFixture = fixture.kind === "shelf" || fixture.kind === "cold_case";
+  const drawFixtureLayers = (target: DrawBounds): void => {
+    if (!isMerchandiseFixture || !fixture.categoryId) {
+      drawAtlasCell(context, assets.fixtures, index, 4, FIXTURE_CELL_WIDTH, FIXTURE_CELL_HEIGHT, target);
+      return;
+    }
+    const baseIndex = fixture.kind === "cold_case" ? 1 : 0;
+    drawAtlasCell(context, assets.fixtureBases, baseIndex, FIXTURE_BASE_COLUMNS, FIXTURE_CELL_WIDTH, FIXTURE_CELL_HEIGHT, target);
+    const merchandiseIndex = resolveMerchandiseArtIndex(fixture, snapshot);
+    if (merchandiseIndex === undefined) return;
+    drawAtlasCell(
+      context,
+      assets.merchandise,
+      merchandiseIndex,
+      7,
+      FIXTURE_CELL_WIDTH,
+      FIXTURE_CELL_HEIGHT,
+      target,
+    );
+  };
   if (rotated) {
     context.translate(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
     context.rotate(Math.PI / 2);
-    drawAtlasCell(
-      context,
-      assets.fixtures,
-      index,
-      4,
-      FIXTURE_CELL_WIDTH,
-      FIXTURE_CELL_HEIGHT,
-      {
+    drawFixtureLayers({
         x: -visualWidth / 2,
         y: bounds.width / 2 - visualHeight + 5,
         width: visualWidth,
         height: visualHeight,
-      },
-    );
+      });
   } else {
-    drawAtlasCell(
-      context,
-      assets.fixtures,
-      index,
-      4,
-      FIXTURE_CELL_WIDTH,
-      FIXTURE_CELL_HEIGHT,
-      destination,
-    );
+    drawFixtureLayers(destination);
   }
   context.restore();
 
@@ -324,6 +378,8 @@ export function drawUiIcon(
 
 export const STORE_ART_ATLAS_SPEC = {
   fixtures: { width: 1536, height: 768, columns: 4, rows: 3 },
+  fixtureBases: { width: 768, height: 256, columns: 2, rows: 1 },
+  merchandise: { width: 2688, height: 1024, columns: 7, rows: 4 },
   staff: { width: 768, height: 768, columns: 4, rows: 3 },
   customers: { width: 640, height: 1760, columns: 4, rows: 8 },
   icons: { width: 1024, height: 128, columns: 8, rows: 1 },
