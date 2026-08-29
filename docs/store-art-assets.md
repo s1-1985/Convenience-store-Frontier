@@ -7,11 +7,33 @@
 | ファイル | 内容 | セル構成 |
 |---|---|---|
 | `fixtures.png` | 店内什器12種(entrance/drinks/dessert/ready_meal/magazines/register/snacks/instant/daily_goods/waste/backroom/empty) | 4列×3行、384×256px/セル |
+| `fixture-bases.png` | 空の什器本体2種(常温ゴンドラ/冷蔵ケース) | 2列×1行、384×256px/セル |
+| `merchandise.png` | 商品オーバーレイ7種(drinks/dessert/ready_meal/magazines/snacks/instant/daily_goods) | 7列×1行、384×256px/セル |
 | `staff.png` | レジ・補充・清掃の店員、前後左右 | 4列×3行、192×256px/セル |
 | `customers.png` | 客6種、前後左右(8行分の枠を確保、7〜8行目は未使用) | 4列×8行、160×220px/セル |
 | `icons.png` | 時刻・カレンダー・客数・在庫箱・売上グラフ・硬貨(売上)・財布(所持金)・天気 | 8列×1行、128×128px/セル |
 
 `icons.svg` は下部ナビゲーション(店舗/商品/発注/人員/情報)のCSS背景画像として別途使われており、`icons.png`とは無関係の別アセット。
+
+`fixtures.png`のうちdrinks/dessert/ready_meal/magazines/snacks/instant/daily_goods/emptyの8セルは、
+下記の什器レイヤー方式の導入後は`drawFixtureArtwork`から参照されない(常温什器・冷蔵ケースはカテゴリーを
+持つ限り常にレイヤー方式で描画されるため)。entrance/register/waste/backroomの4セルのみ現役。未使用セルは
+削除しても実害はないが、当面はそのまま残置している。
+
+## 什器と商品の組み替え
+
+商品入りの棚を一枚絵として固定せず、`fixture-bases.png`（空の什器）と
+`merchandise.png`（商品陳列)を同一サイズのセルとして重ねて描画する。
+通常ゴンドラと冷蔵ケースのどちらに商品を載せられるかは
+`fixtures-manifest.json`で宣言し、Claude Codeを含む実装担当は画像の座標を
+推測せず、このマニフェストを参照する。`merchandise.png`の各セルは在庫量に応じた
+横方向クロップ(`fillRatio`)にそのまま使われるため、他アトラスのように内容へ
+トリミングせず、セル全体(384×256px)へ均等に配置してある。
+
+商品の表示量はシミュレーション上の棚在庫率から`full`、`normal`、`low`、
+`empty`の4状態へ変換する。商品レイヤーだけを横方向に減らすため、在庫が
+なくなっても空の什器はその場に残る。カテゴリを変更するときも什器画像を
+作り直す必要はなく、商品レイヤーのセルを差し替える。
 
 ## 文字の扱い
 
