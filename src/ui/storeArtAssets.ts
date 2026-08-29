@@ -31,9 +31,7 @@ export interface FixtureArtworkPlacement {
 
 export type AgentFacing = "front" | "left" | "right" | "back";
 
-// The source-controlled SVG atlases are the canonical game assets.  Previous
-// builds pointed at generated WebP files which were not present in a clean
-// checkout, so Android silently fell back to placeholder rectangles.
+// The source-controlled PNG atlases are the canonical game assets.
 const FIXTURE_CELL_WIDTH = 384;
 const FIXTURE_CELL_HEIGHT = 256;
 const STAFF_CELL_WIDTH = 192;
@@ -73,10 +71,10 @@ const FACING_COLUMN: Record<AgentFacing, number> = {
 const CUSTOMER_ROWS = [0, 1, 2, 3, 4, 5] as const;
 
 const ASSET_URLS = {
-  fixtures: "/assets/store/fixtures.svg",
-  staff: "/assets/store/staff.svg",
-  customers: "/assets/store/customers.svg",
-  icons: "/assets/store/icons.svg",
+  fixtures: "/assets/store/fixtures.png",
+  staff: "/assets/store/staff.png",
+  customers: "/assets/store/customers.png",
+  icons: "/assets/store/icons.png",
 } as const;
 
 function loadImage(url: string): Promise<HTMLImageElement> {
