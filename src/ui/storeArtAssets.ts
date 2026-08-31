@@ -212,6 +212,7 @@ export function drawFixtureArtwork(
   fixture: StoreFixture,
   snapshot: StoreOperationsSnapshot,
   bounds: DrawBounds,
+  minimumTopY = -Infinity,
 ): FixtureArtworkPlacement | undefined {
   const index = resolveFixtureArtIndex(fixture, snapshot);
   if (index === undefined) return undefined;
@@ -227,10 +228,16 @@ export function drawFixtureArtwork(
     : fixture.kind === "waste"
       ? Math.max(64, bounds.height * 1.75)
       : Math.max(88, Math.min(126, bounds.height * 2.45));
+  // Wider fixtures (e.g. a 6-tile bento case) scale up in height along with their
+  // width, since the atlas cell keeps a fixed aspect ratio. That overhang is fine
+  // over open floor, but a fixture sitting in the store's very first row has no
+  // floor above it to overhang into — clamp so the art never climbs above the
+  // playable area and paints over the HUD drawn earlier in the frame.
   const visualHeight = Math.max(naturalHeight, minimumHeight);
+  const destinationY = Math.max(minimumTopY, bounds.y + bounds.height - visualHeight + 5);
   const destination: DrawBounds = {
     x: bounds.x + (bounds.width - visualWidth) / 2,
-    y: bounds.y + bounds.height - visualHeight + 5,
+    y: destinationY,
     width: visualWidth,
     height: visualHeight,
   };
