@@ -33,6 +33,7 @@ import { detectStoreIncidents } from "../game/storeIncidents.js";
 import {
   createStoreLayoutEditorUi,
   loadSavedStoreLayout,
+  saveStoreLayout,
   type StoreLayoutEditorUi,
 } from "./storeLayoutEditorUi.js";
 import { configureHiDpiCanvas } from "./storeCanvasResolution.js";
@@ -1071,6 +1072,13 @@ function bindNavigation(
         const result = getEngine().swapFixtureCategories(selectedSwapFixtureId, fixtureId);
         selectedSwapFixtureId = undefined;
         if (message) message.textContent = result.message;
+        if (result.ok) {
+          // The canvas render loop draws from a `layout` snapshot captured once at
+          // startup; refresh it so swapped fixtures show their new artwork immediately
+          // instead of only after the next replaceEngine (day rollover or reload).
+          replaceEngine(getEngine());
+          saveStoreLayout(getEngine().getLayout());
+        }
         saveEngine(getEngine());
       }
       renderProductPanel(productPanel, getEngine().getSnapshot(), getEngine().getLayout());

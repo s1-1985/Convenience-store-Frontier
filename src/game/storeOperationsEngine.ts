@@ -1188,9 +1188,33 @@ export function createStoreOperationsEngine(
         return { ok: false, message: "常温什器と冷蔵ケースの間では入れ替えられません" };
       }
       const categoryA = fixtureA.categoryId;
-      fixtureA.categoryId = fixtureB.categoryId;
+      const categoryB = fixtureB.categoryId;
+      fixtureA.categoryId = categoryB;
       fixtureB.categoryId = categoryA;
       changedSinceLastDay = true;
+
+      // Agents already en route to one of the swapped fixtures hold a path computed
+      // from the old category locations. Re-route them to the category's new fixture
+      // so they don't arrive at a shelf that no longer displays what they're after.
+      for (const customer of customers) {
+        if (
+          customer.state === "walking_to_shelf" &&
+          (customer.targetCategory === categoryA || customer.targetCategory === categoryB)
+        ) {
+          routeCustomerToCategory(customer, customer.targetCategory);
+        }
+      }
+      for (const member of staff) {
+        if (
+          member.state === "walking_to_shelf" &&
+          member.task === "replenishment" &&
+          (member.targetCategory === categoryA || member.targetCategory === categoryB)
+        ) {
+          const fixture = fixtureForCategory(layout, member.targetCategory);
+          if (fixture) routeStaff(member, fixture.staffServicePoints, "walking_to_shelf");
+        }
+      }
+
       return { ok: true, message: "陳列カテゴリを入れ替えました" };
     },
 
