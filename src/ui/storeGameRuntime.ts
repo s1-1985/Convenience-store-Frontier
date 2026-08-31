@@ -313,7 +313,7 @@ function drawFixture(
 ): void {
   const bounds = fixtureBounds(fixture, geometry);
   const artwork = storeArtAssets
-    ? drawFixtureArtwork(context, storeArtAssets, fixture, snapshot, bounds)
+    ? drawFixtureArtwork(context, storeArtAssets, fixture, snapshot, bounds, geometry.gridY)
     : undefined;
   if (!artwork) drawFallbackFixture(context, fixture, bounds);
 
