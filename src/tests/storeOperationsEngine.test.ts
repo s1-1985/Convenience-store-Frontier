@@ -429,4 +429,47 @@ describe("individual store operations engine", () => {
 
     expect(engine.getSnapshot().daysSincePolicyChange).toBe(0);
   });
+
+  it("re-routes a customer already walking to a shelf when its category is swapped mid-errand", () => {
+    const engine = createStoreOperationsEngine(506);
+    let walker: ReturnType<StoreOperationsEngine["getSnapshot"]>["customers"][number] | undefined;
+    let elapsed = 0;
+    while (!walker && elapsed < 120) {
+      engine.advance(0.25, context({ arrivalRatePerMinute: 40 }));
+      elapsed += 0.25;
+      walker = engine.getSnapshot().customers.find(
+        (customer) => customer.state === "walking_to_shelf" && customer.targetCategory !== undefined,
+      );
+    }
+    expect(walker).toBeDefined();
+    const targetCategory = walker!.targetCategory!;
+
+    const layoutBefore = engine.getLayout();
+    const originalFixture = layoutBefore.fixtures.find((fixture) => fixture.categoryId === targetCategory);
+    expect(originalFixture).toBeDefined();
+    const partnerFixture = layoutBefore.fixtures.find(
+      (fixture) => fixture.kind === originalFixture!.kind && fixture.id !== originalFixture!.id && fixture.categoryId,
+    );
+    expect(partnerFixture).toBeDefined();
+
+    const result = engine.swapFixtureCategories(originalFixture!.id, partnerFixture!.id);
+    expect(result.ok).toBe(true);
+
+    const rerouted = engine.getSnapshot().customers.find((customer) => customer.id === walker!.id);
+    expect(rerouted).toBeDefined();
+    expect(rerouted!.targetCategory).toBe(targetCategory);
+    // The category now lives at what used to be the partner fixture, so the
+    // customer's recomputed path should lead to one of its service points
+    // instead of the original fixture's.
+    const lastStep = rerouted!.path.at(-1);
+    expect(lastStep).toBeDefined();
+    const leadsToPartner = partnerFixture!.customerServicePoints.some(
+      (point) => point.x === lastStep!.x && point.y === lastStep!.y,
+    );
+    const leadsToOriginal = originalFixture!.customerServicePoints.some(
+      (point) => point.x === lastStep!.x && point.y === lastStep!.y,
+    );
+    expect(leadsToPartner || rerouted!.state !== "walking_to_shelf").toBe(true);
+    expect(leadsToOriginal && rerouted!.state === "walking_to_shelf").toBe(false);
+  });
 });
