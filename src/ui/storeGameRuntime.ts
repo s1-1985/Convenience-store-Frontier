@@ -23,7 +23,13 @@ import {
   type TilePoint,
 } from "../game/storeOperationsEngine.js";
 import { getGameSession, peekGameSession, type GameSessionState } from "./gameSession.js";
-import type { CohortDefinition, ScenarioBundle, TimeBlockId } from "../simulation/types.js";
+import type {
+  CohortDefinition,
+  DeliveryPolicyId,
+  OrderingPolicyId,
+  ScenarioBundle,
+  TimeBlockId,
+} from "../simulation/types.js";
 import { priorityStoreObjectives, type StoreObjectiveStatus } from "../game/storeObjectives.js";
 import {
   assignmentsForPreset,
@@ -286,6 +292,48 @@ function syncSupplyPolicy(engine: StoreOperationsEngine): void {
   const ordering = optional<HTMLSelectElement>("ordering-policy-select")?.value ?? "standard";
   const delivery = optional<HTMLSelectElement>("delivery-policy-select")?.value ?? "once_daily";
   engine.setSupplyPolicy(ordering as StoreOrderingPolicy, delivery as StoreDeliveryPolicy);
+}
+
+const POLICY_TIME_BLOCKS: readonly TimeBlockId[] = ["morning", "midday", "afternoon", "evening"];
+let lastAppliedPolicySignature = "";
+
+// Mirrors the same opening/closing hour, per-time-block staffing, and ordering/
+// delivery policy form values that syncSupplyPolicy() already feeds into the visual
+// engine every frame, but into the real numeric Simulation too (see
+// src/ui/gameSession.ts) — so changes made from this screen reach the real economy
+// without needing main.ts's separate "方針を反映" button. set_category_area and
+// set_task_priorities are not synced here yet: shelf-area/tile-layout unification is
+// a later migration phase (see the plan in the session that added this).
+function syncPolicyToRealEngine(): void {
+  const session = gameSession();
+  if (!session) return;
+  const opening = numberFrom(optional<HTMLSelectElement>("opening-hour-select")?.value) || 8;
+  const closing = numberFrom(optional<HTMLSelectElement>("closing-hour-select")?.value) || 20;
+  const ordering = optional<HTMLSelectElement>("ordering-policy-select")?.value ?? "standard";
+  const delivery = optional<HTMLSelectElement>("delivery-policy-select")?.value ?? "once_daily";
+  const staffing = Object.fromEntries(
+    POLICY_TIME_BLOCKS.map((block) => [
+      block,
+      Math.max(1, Math.round(numberFrom(optional<HTMLInputElement>(`staff-${block}`)?.value) || 2)),
+    ]),
+  ) as Record<TimeBlockId, number>;
+
+  const signature = JSON.stringify({ opening, closing, ordering, delivery, staffing });
+  if (signature === lastAppliedPolicySignature) return;
+  lastAppliedPolicySignature = signature;
+
+  const { simulation } = session.session;
+  if (opening >= 6 && closing <= 24 && opening < closing) {
+    simulation.applyPolicy({ type: "set_opening_hours", openingHour: opening, closingHour: closing });
+  }
+  simulation.applyPolicy({ type: "set_ordering_policy", policy: ordering as OrderingPolicyId });
+  simulation.applyPolicy({ type: "set_delivery_policy", policy: delivery as DeliveryPolicyId });
+  for (const block of POLICY_TIME_BLOCKS) {
+    const count = staffing[block];
+    if (count >= 1 && count <= 4) {
+      simulation.applyPolicy({ type: "set_staffing", timeBlock: block, count });
+    }
+  }
 }
 
 function tilePixel(tile: TilePoint, geometry: StoreViewGeometry): { x: number; y: number } {
@@ -1371,6 +1419,7 @@ function start(): void {
     lastTimestamp = timestamp;
     const day = currentDay();
     syncSupplyPolicy(engine);
+    syncPolicyToRealEngine();
     if (day !== knownDay) {
       engine.beginDay(day, gameSession()?.session.simulation.getSnapshot().cash);
       knownDay = day;
