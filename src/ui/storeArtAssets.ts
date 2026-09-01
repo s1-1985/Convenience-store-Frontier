@@ -72,9 +72,10 @@ const FACING_COLUMN: Record<AgentFacing, number> = {
 };
 
 // See data/assets/store/customers-manifest.json for which archetype each row
-// depicts. Selection here is a uniform random pick across all rows; per-archetype
-// spawn weighting (by district/time) and shopping-behavior differences are not
-// implemented yet.
+// depicts. `agent.variant` is chosen by src/game/storeOperationsEngine.ts's
+// spawnCustomer, which prefers the cohort-weighted archetype pools built in
+// storeGameRuntime.ts (see COHORT_ARCHETYPE_ROWS there) when scenario data is
+// loaded, and otherwise falls back to a uniform pick across all rows.
 const CUSTOMER_ROWS = Array.from({ length: 24 }, (_, index) => index);
 
 const ASSET_URLS = {

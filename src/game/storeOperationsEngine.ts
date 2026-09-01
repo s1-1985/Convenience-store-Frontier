@@ -135,12 +135,31 @@ export interface StoreStaffAssignments {
   cleaning: number;
 }
 
+/**
+ * One arriving-customer archetype pool: its own shopping-category weights, the sprite
+ * rows (see data/assets/store/customers-manifest.json) that represent it visually, and
+ * its relative likelihood of being the pool an arriving customer is drawn from.
+ */
+export interface CustomerArchetypePool {
+  categoryWeights: Record<StoreCategoryId, number>;
+  archetypeRows: number[];
+  weight: number;
+}
+
 export interface StoreEngineContext {
   isOpen: boolean;
   hour: number;
   arrivalRatePerMinute: number;
   categoryWeights: Record<StoreCategoryId, number>;
   requestedStaffCount: number;
+  /**
+   * Optional cohort-derived archetype pools for the current time block. When present,
+   * each arriving customer is drawn from a weighted pool instead of the flat
+   * `categoryWeights` and a uniform sprite row, so shopping behavior and appearance
+   * probability follow the actual customer cohorts. Absent (e.g. before scenario data
+   * has loaded) falls back to the flat behavior.
+   */
+  customerArchetypePools?: CustomerArchetypePool[];
 }
 
 export interface StoreOperationsSnapshot {
@@ -212,6 +231,10 @@ const CATEGORY_DEFAULTS: Record<StoreCategoryId, Omit<ShelfInventoryState, "cate
   daily_goods: { shelfUnits: 12, shelfCapacity: 16, backroomUnits: 30, price: 420 },
   magazines: { shelfUnits: 9, shelfCapacity: 12, backroomUnits: 18, price: 490 },
 };
+
+// Sprite row count in data/assets/store/customers-manifest.json. Used as the fallback
+// range when no cohort-derived archetype pool is available for the current context.
+const CUSTOMER_VISUAL_ROW_COUNT = 24;
 
 export function categoryPriceRange(category: StoreCategoryId): { min: number; max: number } {
   const basePrice = CATEGORY_DEFAULTS[category].price;
@@ -653,6 +676,19 @@ export function createStoreOperationsEngine(
     return result;
   }
 
+  function pickArchetypePool(context: StoreEngineContext): CustomerArchetypePool | undefined {
+    const pools = context.customerArchetypePools;
+    if (!pools || pools.length === 0) return undefined;
+    const total = pools.reduce((sum, pool) => sum + Math.max(0, pool.weight), 0);
+    if (total <= 0) return undefined;
+    let cursor = random() * total;
+    for (const pool of pools) {
+      cursor -= Math.max(0, pool.weight);
+      if (cursor <= 0) return pool;
+    }
+    return pools.at(-1);
+  }
+
   function routeCustomerToCategory(customer: StoreCustomerAgent, categoryId: StoreCategoryId): boolean {
     const fixture = fixtureForCategory(layout, categoryId);
     if (!fixture) return false;
@@ -681,20 +717,25 @@ export function createStoreOperationsEngine(
 
   function spawnCustomer(context: StoreEngineContext): void {
     if (customers.length >= MAX_VISIBLE_CUSTOMERS) return;
+    const pool = pickArchetypePool(context);
+    const variant =
+      pool && pool.archetypeRows.length > 0
+        ? pool.archetypeRows[Math.floor(random() * pool.archetypeRows.length)]!
+        : Math.floor(random() * CUSTOMER_VISUAL_ROW_COUNT);
     const customer: StoreCustomerAgent = {
       id: `customer-${nextCustomerNumber}`,
       x: layout.entranceTile.x,
       y: layout.entranceTile.y,
       state: "walking_to_shelf",
       path: [],
-      wishList: createWishList(context.categoryWeights),
+      wishList: createWishList(pool?.categoryWeights ?? context.categoryWeights),
       attemptedCategories: [],
       basketUnits: 0,
       basketValue: 0,
       browseRemainingSeconds: 0,
       patienceRemainingSeconds: 13 + random() * 16 + serviceTrust * 6,
       regular: random() < 0.08 + serviceTrust * 0.45,
-      variant: Math.floor(random() * 8),
+      variant,
     };
     nextCustomerNumber += 1;
     const firstCategory = customer.wishList.shift();
