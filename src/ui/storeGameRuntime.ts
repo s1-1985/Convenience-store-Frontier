@@ -22,7 +22,7 @@ import {
   type StoreStaffTask,
   type TilePoint,
 } from "../game/storeOperationsEngine.js";
-import { loadBrowserScenario } from "./browserScenario.js";
+import { getGameSession, peekGameSession, type GameSessionState } from "./gameSession.js";
 import type { CohortDefinition, ScenarioBundle, TimeBlockId } from "../simulation/types.js";
 import { priorityStoreObjectives, type StoreObjectiveStatus } from "../game/storeObjectives.js";
 import {
@@ -53,8 +53,15 @@ const LOGICAL_WIDTH = 1080;
 const LOGICAL_HEIGHT = 500;
 const STORE_SAVE_KEY = "convenience-store-frontier.store-operations.v1";
 let storeArtAssets: StoreArtAssets | undefined;
-let cohortScenario: ScenarioBundle | undefined;
 let lastAutoStoppedIncident = "";
+
+// The single Simulation instance shared with main.ts's numeric dashboard (see
+// src/ui/gameSession.ts). Populated once loaded; read fresh via peekGameSession()
+// rather than cached locally, so a reset triggered from main.ts's UI is picked up
+// immediately instead of leaving this module pointing at a stale session.
+function gameSession(): GameSessionState | undefined {
+  return peekGameSession();
+}
 
 // data/cohorts/customer_cohorts.json category ids -> StoreCategoryId. "dessert" has no
 // scenario-side counterpart yet, so it is carved out of the snacks share below instead
@@ -196,16 +203,32 @@ function numberFrom(textValue: string | null | undefined): number {
   return match ? Number.parseFloat(match[0]) : 0;
 }
 
+// Mirrors src/ui/presentation.ts's formatClock: a slot is 15 simulated minutes
+// starting at 06:00.
+function simulatedClock(): { day: number; hour: number; minute: number } | undefined {
+  const session = gameSession();
+  if (!session) return undefined;
+  const snapshot = session.session.simulation.getSnapshot();
+  const totalMinutes = 6 * 60 + snapshot.slot * 15;
+  return { day: snapshot.day, hour: Math.floor(totalMinutes / 60), minute: totalMinutes % 60 };
+}
+
 function currentDay(): number {
+  const clock = simulatedClock();
+  if (clock) return clock.day;
   return Math.max(1, Math.round(numberFrom(optional("day-label")?.textContent)));
 }
 
 function currentHour(): number {
+  const clock = simulatedClock();
+  if (clock) return clock.hour;
   const value = optional("time-label")?.textContent ?? "06:00";
   return Number.parseInt(value.split(":")[0] ?? "6", 10);
 }
 
 function currentMinute(): number {
+  const clock = simulatedClock();
+  if (clock) return clock.minute;
   const value = optional("time-label")?.textContent ?? "06:00";
   return Number.parseInt(value.split(":")[1] ?? "0", 10);
 }
@@ -253,7 +276,9 @@ function engineContext(focus?: StoreCategoryId): StoreEngineContext {
     arrivalRatePerMinute: arrivalRatePerMinute(),
     categoryWeights: weights,
     requestedStaffCount: currentStaffing(),
-    customerArchetypePools: cohortScenario ? customerArchetypePools(cohortScenario, hour, focus) : undefined,
+    customerArchetypePools: gameSession()
+      ? customerArchetypePools(gameSession()!.scenario, hour, focus)
+      : undefined,
   };
 }
 
@@ -1311,9 +1336,7 @@ function start(): void {
   void loadStoreArtAssets().then((assets) => {
     storeArtAssets = assets;
   });
-  void loadBrowserScenario().then((bundle) => {
-    cohortScenario = bundle;
-  });
+  void getGameSession();
 
   const seed = Math.round(numberFrom(optional<HTMLInputElement>("seed-input")?.value) || 1977);
   const saved = readSavedEngine();
@@ -1349,7 +1372,7 @@ function start(): void {
     const day = currentDay();
     syncSupplyPolicy(engine);
     if (day !== knownDay) {
-      engine.beginDay(day);
+      engine.beginDay(day, gameSession()?.session.simulation.getSnapshot().cash);
       knownDay = day;
     }
     const focus = engine.getSnapshot().merchandisingFocus;

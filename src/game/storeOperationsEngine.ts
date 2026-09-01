@@ -212,7 +212,15 @@ export type StoreDeliveryPolicy =
 
 export interface StoreOperationsEngine {
   advance(deltaSeconds: number, context: StoreEngineContext): void;
-  beginDay(day: number): void;
+  /**
+   * Starts a new day. When `realCash` is given (the authoritative cash from the
+   * shared numeric Simulation, see src/ui/gameSession.ts), it replaces this engine's
+   * own approximated day-end profit calculation so the displayed and
+   * capacity-investment-gating cash stays reconciled with the real economy at every
+   * day boundary. Omit it (e.g. in tests, or before the real session has loaded) to
+   * keep the old self-contained approximation.
+   */
+  beginDay(day: number, realCash?: number): void;
   setStaffAssignments(assignments: StoreStaffAssignments): void;
   setSupplyPolicy(ordering: StoreOrderingPolicy, delivery: StoreDeliveryPolicy): void;
   setMerchandisingFocus(category?: StoreCategoryId): void;
@@ -1153,7 +1161,7 @@ export function createStoreOperationsEngine(
       kpis.maximumQueueLength = Math.max(kpis.maximumQueueLength, queueCustomerIds.length);
     },
 
-    beginDay(nextDay: number): void {
+    beginDay(nextDay: number, realCash?: number): void {
       if (nextDay === day) return;
       if (kpis.enteredCustomers > 0 || kpis.revenue > 0) {
         const entered = Math.max(1, kpis.enteredCustomers);
@@ -1175,8 +1183,12 @@ export function createStoreOperationsEngine(
         });
         dailyHistory = dailyHistory.slice(-14);
       }
-      const netIncome = kpis.revenue * (1 - ASSUMED_COST_RATIO) - DAILY_OPERATING_COST;
-      cash = Math.max(0, cash + netIncome);
+      if (realCash === undefined) {
+        const netIncome = kpis.revenue * (1 - ASSUMED_COST_RATIO) - DAILY_OPERATING_COST;
+        cash = Math.max(0, cash + netIncome);
+      } else {
+        cash = Math.max(0, realCash);
+      }
       daysSincePolicyChange = changedSinceLastDay ? 0 : daysSincePolicyChange + 1;
       changedSinceLastDay = false;
       day = nextDay;

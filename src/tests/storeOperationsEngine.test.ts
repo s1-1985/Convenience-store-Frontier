@@ -505,4 +505,26 @@ describe("individual store operations engine", () => {
       expect([3, 18]).toContain(customer.variant);
     }
   });
+
+  it("replaces the approximated day-end profit with a given real cash figure", () => {
+    const withoutReal = createStoreOperationsEngine(1977);
+    run(withoutReal, 160, context({ requestedStaffCount: 3, arrivalRatePerMinute: 12 }));
+    withoutReal.beginDay(2);
+    const approximated = withoutReal.getSnapshot().cash;
+
+    const withReal = createStoreOperationsEngine(1977);
+    run(withReal, 160, context({ requestedStaffCount: 3, arrivalRatePerMinute: 12 }));
+    withReal.beginDay(2, 987_654);
+    expect(withReal.getSnapshot().cash).toBe(987_654);
+    // Sanity check that the two engines actually diverged in cash after this call,
+    // i.e. that the override genuinely replaced (rather than coincided with) the
+    // engine's own approximation.
+    expect(withReal.getSnapshot().cash).not.toBe(approximated);
+  });
+
+  it("clamps a negative real cash figure to zero, same as the approximated path", () => {
+    const engine = createStoreOperationsEngine(1977);
+    engine.beginDay(2, -500);
+    expect(engine.getSnapshot().cash).toBe(0);
+  });
 });
