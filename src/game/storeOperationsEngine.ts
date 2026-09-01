@@ -191,6 +191,7 @@ export interface StoreOperationsSnapshot {
   cash: number;
   categoryTiers: Record<StoreCategoryId, number>;
   daysSincePolicyChange: number;
+  unsyncedCapacityInvestment: number;
 }
 
 export interface SerializedStoreOperations extends StoreOperationsSnapshot {
@@ -212,7 +213,24 @@ export type StoreDeliveryPolicy =
 
 export interface StoreOperationsEngine {
   advance(deltaSeconds: number, context: StoreEngineContext): void;
-  beginDay(day: number): void;
+  /**
+   * Starts a new day. When `realCash` is given (the authoritative cash from the
+   * shared numeric Simulation, see src/ui/gameSession.ts), it replaces this engine's
+   * own approximated day-end profit calculation so the displayed and
+   * capacity-investment-gating cash stays reconciled with the real economy at every
+   * day boundary. Omit it (e.g. in tests, or before the real session has loaded) to
+   * keep the old self-contained approximation.
+   */
+  beginDay(day: number, realCash?: number): void;
+  /**
+   * Reconciles this engine's cash against the authoritative real Simulation's cash
+   * immediately, without waiting for the next beginDay() transition. Needed because
+   * beginDay only fires once the visual clock's day actually changes, which does not
+   * happen during day 1 of a fresh game/reset — leaving this engine's own
+   * hard-coded starting cash on screen (and gating capacity-investment affordability)
+   * until day 2 otherwise. Like beginDay, nets out unsyncedCapacityInvestment.
+   */
+  setCash(realCash: number): void;
   setStaffAssignments(assignments: StoreStaffAssignments): void;
   setSupplyPolicy(ordering: StoreOrderingPolicy, delivery: StoreDeliveryPolicy): void;
   setMerchandisingFocus(category?: StoreCategoryId): void;
@@ -648,6 +666,12 @@ export function createStoreOperationsEngine(
   };
   let daysSincePolicyChange = restored?.daysSincePolicyChange ?? 0;
   let changedSinceLastDay = false;
+  // Running total spent on shelf-capacity investments (investInCategoryCapacity),
+  // which the shared real Simulation has no matching command for and therefore never
+  // reflects. Every time this engine's cash is reconciled against that real cash (via
+  // beginDay's realCash or setCash), this amount is subtracted so those purchases
+  // stay paid for instead of being silently refunded by the reconciliation.
+  let unsyncedCapacityInvestment = restored?.unsyncedCapacityInvestment ?? 0;
 
   function random(): number {
     let value = rngState | 0;
@@ -1124,6 +1148,13 @@ export function createStoreOperationsEngine(
     if (deliveryPolicy === "all_categories_twice_daily") deliverStock(CATEGORY_IDS, 0.58);
   }
 
+  // The shared real Simulation has no command for shelf-capacity purchases, so its
+  // cash never reflects them; net out unsyncedCapacityInvestment so reconciling
+  // against it doesn't silently refund those purchases (see investInCategoryCapacity).
+  function reconcileWithRealCash(realCash: number): number {
+    return Math.max(0, realCash - unsyncedCapacityInvestment);
+  }
+
   return {
     advance(deltaSeconds: number, context: StoreEngineContext): void {
       const safeDelta = clamp(deltaSeconds, 0, 0.5);
@@ -1153,7 +1184,7 @@ export function createStoreOperationsEngine(
       kpis.maximumQueueLength = Math.max(kpis.maximumQueueLength, queueCustomerIds.length);
     },
 
-    beginDay(nextDay: number): void {
+    beginDay(nextDay: number, realCash?: number): void {
       if (nextDay === day) return;
       if (kpis.enteredCustomers > 0 || kpis.revenue > 0) {
         const entered = Math.max(1, kpis.enteredCustomers);
@@ -1175,8 +1206,12 @@ export function createStoreOperationsEngine(
         });
         dailyHistory = dailyHistory.slice(-14);
       }
-      const netIncome = kpis.revenue * (1 - ASSUMED_COST_RATIO) - DAILY_OPERATING_COST;
-      cash = Math.max(0, cash + netIncome);
+      if (realCash === undefined) {
+        const netIncome = kpis.revenue * (1 - ASSUMED_COST_RATIO) - DAILY_OPERATING_COST;
+        cash = Math.max(0, cash + netIncome);
+      } else {
+        cash = reconcileWithRealCash(realCash);
+      }
       daysSincePolicyChange = changedSinceLastDay ? 0 : daysSincePolicyChange + 1;
       changedSinceLastDay = false;
       day = nextDay;
@@ -1184,6 +1219,10 @@ export function createStoreOperationsEngine(
       spawnAccumulator = 0;
       checkoutProgressSeconds = 0;
       deliverMorningStock();
+    },
+
+    setCash(realCash: number): void {
+      cash = reconcileWithRealCash(realCash);
     },
 
     setStaffAssignments(nextAssignments: StoreStaffAssignments): void {
@@ -1219,6 +1258,7 @@ export function createStoreOperationsEngine(
         return { ok: false, message: `資金が不足しています(必要 ¥${investment.cost.toLocaleString("ja-JP")})` };
       }
       cash -= investment.cost;
+      unsyncedCapacityInvestment += investment.cost;
       categoryTiers[category] = tier + 1;
       inventories[category].shelfCapacity += investment.capacityBonus;
       changedSinceLastDay = true;
@@ -1289,6 +1329,7 @@ export function createStoreOperationsEngine(
         cash,
         categoryTiers: { ...categoryTiers },
         daysSincePolicyChange,
+        unsyncedCapacityInvestment,
       };
     },
 

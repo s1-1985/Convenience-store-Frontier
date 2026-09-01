@@ -22,8 +22,14 @@ import {
   type StoreStaffTask,
   type TilePoint,
 } from "../game/storeOperationsEngine.js";
-import { loadBrowserScenario } from "./browserScenario.js";
-import type { CohortDefinition, ScenarioBundle, TimeBlockId } from "../simulation/types.js";
+import { getGameSession, peekGameSession, type GameSessionState } from "./gameSession.js";
+import type {
+  CohortDefinition,
+  DeliveryPolicyId,
+  OrderingPolicyId,
+  ScenarioBundle,
+  TimeBlockId,
+} from "../simulation/types.js";
 import { priorityStoreObjectives, type StoreObjectiveStatus } from "../game/storeObjectives.js";
 import {
   assignmentsForPreset,
@@ -53,8 +59,15 @@ const LOGICAL_WIDTH = 1080;
 const LOGICAL_HEIGHT = 500;
 const STORE_SAVE_KEY = "convenience-store-frontier.store-operations.v1";
 let storeArtAssets: StoreArtAssets | undefined;
-let cohortScenario: ScenarioBundle | undefined;
 let lastAutoStoppedIncident = "";
+
+// The single Simulation instance shared with main.ts's numeric dashboard (see
+// src/ui/gameSession.ts). Populated once loaded; read fresh via peekGameSession()
+// rather than cached locally, so a reset triggered from main.ts's UI is picked up
+// immediately instead of leaving this module pointing at a stale session.
+function gameSession(): GameSessionState | undefined {
+  return peekGameSession();
+}
 
 // data/cohorts/customer_cohorts.json category ids -> StoreCategoryId. "dessert" has no
 // scenario-side counterpart yet, so it is carved out of the snacks share below instead
@@ -196,16 +209,32 @@ function numberFrom(textValue: string | null | undefined): number {
   return match ? Number.parseFloat(match[0]) : 0;
 }
 
+// Mirrors src/ui/presentation.ts's formatClock: a slot is 15 simulated minutes
+// starting at 06:00.
+function simulatedClock(): { day: number; hour: number; minute: number } | undefined {
+  const session = gameSession();
+  if (!session) return undefined;
+  const snapshot = session.session.simulation.getSnapshot();
+  const totalMinutes = 6 * 60 + snapshot.slot * 15;
+  return { day: snapshot.day, hour: Math.floor(totalMinutes / 60), minute: totalMinutes % 60 };
+}
+
 function currentDay(): number {
+  const clock = simulatedClock();
+  if (clock) return clock.day;
   return Math.max(1, Math.round(numberFrom(optional("day-label")?.textContent)));
 }
 
 function currentHour(): number {
+  const clock = simulatedClock();
+  if (clock) return clock.hour;
   const value = optional("time-label")?.textContent ?? "06:00";
   return Number.parseInt(value.split(":")[0] ?? "6", 10);
 }
 
 function currentMinute(): number {
+  const clock = simulatedClock();
+  if (clock) return clock.minute;
   const value = optional("time-label")?.textContent ?? "06:00";
   return Number.parseInt(value.split(":")[1] ?? "0", 10);
 }
@@ -234,7 +263,16 @@ function visualTimeScale(): number {
   return 1;
 }
 
+// Slots are 15 real-simulated minutes (see src/simulation/clock.ts), and the visual
+// engine's own arrival rate is expressed per its own in-game minute, so the real
+// engine's per-slot visit count converts directly by dividing by 15.
+const SLOT_MINUTES = 15;
+
 function arrivalRatePerMinute(): number {
+  const session = gameSession();
+  if (session) {
+    return session.session.simulation.getSnapshot().lastSlotPlayerVisits / SLOT_MINUTES;
+  }
   const hour = currentHour();
   const base = hour < 10 ? 5.2 : hour < 14 ? 8.2 : hour < 18 ? 4.4 : 6.3;
   const aggregateQueue = numberFrom(optional("queue-metric")?.textContent);
@@ -253,7 +291,9 @@ function engineContext(focus?: StoreCategoryId): StoreEngineContext {
     arrivalRatePerMinute: arrivalRatePerMinute(),
     categoryWeights: weights,
     requestedStaffCount: currentStaffing(),
-    customerArchetypePools: cohortScenario ? customerArchetypePools(cohortScenario, hour, focus) : undefined,
+    customerArchetypePools: gameSession()
+      ? customerArchetypePools(gameSession()!.scenario, hour, focus)
+      : undefined,
   };
 }
 
@@ -261,6 +301,48 @@ function syncSupplyPolicy(engine: StoreOperationsEngine): void {
   const ordering = optional<HTMLSelectElement>("ordering-policy-select")?.value ?? "standard";
   const delivery = optional<HTMLSelectElement>("delivery-policy-select")?.value ?? "once_daily";
   engine.setSupplyPolicy(ordering as StoreOrderingPolicy, delivery as StoreDeliveryPolicy);
+}
+
+const POLICY_TIME_BLOCKS: readonly TimeBlockId[] = ["morning", "midday", "afternoon", "evening"];
+let lastAppliedPolicySignature = "";
+
+// Mirrors the same opening/closing hour, per-time-block staffing, and ordering/
+// delivery policy form values that syncSupplyPolicy() already feeds into the visual
+// engine every frame, but into the real numeric Simulation too (see
+// src/ui/gameSession.ts) — so changes made from this screen reach the real economy
+// without needing main.ts's separate "方針を反映" button. set_category_area and
+// set_task_priorities are not synced here yet: shelf-area/tile-layout unification is
+// a later migration phase (see the plan in the session that added this).
+function syncPolicyToRealEngine(): void {
+  const session = gameSession();
+  if (!session) return;
+  const opening = numberFrom(optional<HTMLSelectElement>("opening-hour-select")?.value) || 8;
+  const closing = numberFrom(optional<HTMLSelectElement>("closing-hour-select")?.value) || 20;
+  const ordering = optional<HTMLSelectElement>("ordering-policy-select")?.value ?? "standard";
+  const delivery = optional<HTMLSelectElement>("delivery-policy-select")?.value ?? "once_daily";
+  const staffing = Object.fromEntries(
+    POLICY_TIME_BLOCKS.map((block) => [
+      block,
+      Math.max(1, Math.round(numberFrom(optional<HTMLInputElement>(`staff-${block}`)?.value) || 2)),
+    ]),
+  ) as Record<TimeBlockId, number>;
+
+  const signature = JSON.stringify({ opening, closing, ordering, delivery, staffing });
+  if (signature === lastAppliedPolicySignature) return;
+  lastAppliedPolicySignature = signature;
+
+  const { simulation } = session.session;
+  if (opening >= 6 && closing <= 24 && opening < closing) {
+    simulation.applyPolicy({ type: "set_opening_hours", openingHour: opening, closingHour: closing });
+  }
+  simulation.applyPolicy({ type: "set_ordering_policy", policy: ordering as OrderingPolicyId });
+  simulation.applyPolicy({ type: "set_delivery_policy", policy: delivery as DeliveryPolicyId });
+  for (const block of POLICY_TIME_BLOCKS) {
+    const count = staffing[block];
+    if (count >= 1 && count <= 4) {
+      simulation.applyPolicy({ type: "set_staffing", timeBlock: block, count });
+    }
+  }
 }
 
 function tilePixel(tile: TilePoint, geometry: StoreViewGeometry): { x: number; y: number } {
@@ -1311,9 +1393,7 @@ function start(): void {
   void loadStoreArtAssets().then((assets) => {
     storeArtAssets = assets;
   });
-  void loadBrowserScenario().then((bundle) => {
-    cohortScenario = bundle;
-  });
+  void getGameSession();
 
   const seed = Math.round(numberFrom(optional<HTMLInputElement>("seed-input")?.value) || 1977);
   const saved = readSavedEngine();
@@ -1325,12 +1405,23 @@ function start(): void {
   let lastTimestamp = performance.now();
   let lastSaveTimestamp = lastTimestamp;
   let knownDay = currentDay();
+  // beginDay() only reconciles cash once the visual day actually changes, which does
+  // not happen during day 1 of a fresh game/reset (knownDay already matches
+  // currentDay() by then). Reconcile once, as soon as the real session loads, so the
+  // engine doesn't sit on its own hard-coded starting cash for all of day 1.
+  let hasReconciledInitialCash = false;
 
   const getEngine = (): StoreOperationsEngine => engine;
   const replaceEngine = (next: StoreOperationsEngine): void => {
     engine = next;
     layout = next.getLayout();
     knownDay = currentDay();
+    // The new engine (a fresh createStoreOperationsEngine() on reset, or a
+    // serialize()+restore() clone on a layout edit) needs its own cash
+    // reconciliation pass — see the render loop below. Harmless to redo even when
+    // the engine already carried the right cash forward (a layout edit): it just
+    // reconfirms the same real figure.
+    hasReconciledInitialCash = false;
   };
   const layoutEditor = createStoreLayoutEditorUi({
     shell,
@@ -1348,8 +1439,16 @@ function start(): void {
     lastTimestamp = timestamp;
     const day = currentDay();
     syncSupplyPolicy(engine);
+    syncPolicyToRealEngine();
+    if (!hasReconciledInitialCash) {
+      const session = gameSession();
+      if (session) {
+        engine.setCash(session.session.simulation.getSnapshot().cash);
+        hasReconciledInitialCash = true;
+      }
+    }
     if (day !== knownDay) {
-      engine.beginDay(day);
+      engine.beginDay(day, gameSession()?.session.simulation.getSnapshot().cash);
       knownDay = day;
     }
     const focus = engine.getSnapshot().merchandisingFocus;

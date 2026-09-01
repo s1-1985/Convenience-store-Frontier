@@ -7,12 +7,11 @@ import type {
   ScenarioBundle,
   TimeBlockId,
 } from "../simulation/types.js";
-import { loadBrowserScenario } from "./browserScenario.js";
 import {
   clearBrowserFreePlaySave,
-  createBrowserFreePlaySession,
   type BrowserFreePlaySession,
 } from "./browserFreePlaySession.js";
+import { getGameSession, resetGameSession } from "./gameSession.js";
 import {
   buildDashboardAlerts,
   COMPETITOR_ACTION_LABELS,
@@ -368,7 +367,7 @@ function applyPolicies(): void {
 function resetSimulation(showMessage = true): void {
   stopPlayback();
   clearBrowserFreePlaySave();
-  browserSession = createBrowserFreePlaySession(scenario, currentSeed());
+  browserSession = resetGameSession(currentSeed()).session;
   simulation = browserSession.simulation;
   seedInput.value = String(browserSession.seed);
   previousReportCount = 0;
@@ -801,10 +800,11 @@ function bindEvents(): void {
 
 async function initialize(): Promise<void> {
   try {
-    scenario = await loadBrowserScenario();
+    const gameSession = await getGameSession();
+    scenario = gameSession.scenario;
+    browserSession = gameSession.session;
     element<HTMLElement>("scenario-name").textContent = `フリープレイ / ${scenario.district.displayName}`;
     buildPolicyControls();
-    browserSession = createBrowserFreePlaySession(scenario, currentSeed());
     simulation = browserSession.simulation;
     seedInput.value = String(browserSession.seed);
     bindEvents();
