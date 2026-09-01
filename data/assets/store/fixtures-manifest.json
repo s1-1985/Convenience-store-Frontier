@@ -3,7 +3,9 @@
   "cell": { "width": 384, "height": 256 },
   "fixtureBases": {
     "ambient_gondola": { "atlas": "fixture-bases.svg", "index": 0, "accepts": ["magazines", "snacks", "instant", "daily_goods"] },
-    "refrigerated_case": { "atlas": "fixture-bases.svg", "index": 1, "accepts": ["drinks", "dessert", "ready_meal"] }
+    "refrigerated_case": { "atlas": "fixture-bases.svg", "index": 1, "accepts": ["drinks", "dessert", "ready_meal"] },
+    "frozen_case": { "atlas": "fixture-bases.svg", "index": 2, "accepts": [] },
+    "hot_case": { "atlas": "fixture-bases.svg", "index": 3, "accepts": [] }
   },
   "merchandise": {
     "drinks": { "atlas": "merchandise.svg", "index": 0, "fixtureBase": "refrigerated_case" },

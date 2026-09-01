@@ -120,7 +120,7 @@ const COHORT_ARCHETYPE_ROWS: Record<string, number[]> = {
   cohort_elderly: [3, 18],
   cohort_night_worker: [20, 21, 22, 23],
 };
-const ALL_CUSTOMER_ROWS = Array.from({ length: 24 }, (_, index) => index);
+const ALL_CUSTOMER_ROWS = Array.from({ length: 32 }, (_, index) => index);
 // Small flat slice of arrival weight reserved for archetypes with no modeled cohort
 // above, so those already-produced art assets still appear in play rather than never
 // being drawn. Not a claim about their real-world share of customers.
