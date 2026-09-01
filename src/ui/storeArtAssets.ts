@@ -71,7 +71,11 @@ const FACING_COLUMN: Record<AgentFacing, number> = {
   back: 3,
 };
 
-const CUSTOMER_ROWS = [0, 1, 2, 3, 4, 5] as const;
+// See data/assets/store/customers-manifest.json for which archetype each row
+// depicts. Selection here is a uniform random pick across all rows; per-archetype
+// spawn weighting (by district/time) and shopping-behavior differences are not
+// implemented yet.
+const CUSTOMER_ROWS = Array.from({ length: 24 }, (_, index) => index);
 
 const ASSET_URLS = {
   fixtures: "/assets/store/fixtures.png",
@@ -374,6 +378,6 @@ export const STORE_ART_ATLAS_SPEC = {
   fixtureBases: { width: 768, height: 256, columns: 2, rows: 1 },
   merchandise: { width: 2688, height: 256, columns: 7, rows: 1 },
   staff: { width: 768, height: 768, columns: 4, rows: 3 },
-  customers: { width: 640, height: 1760, columns: 4, rows: 8 },
+  customers: { width: 640, height: 5280, columns: 4, rows: 24 },
   icons: { width: 1024, height: 128, columns: 8, rows: 1 },
 } as const;
