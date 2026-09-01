@@ -398,7 +398,11 @@ function drawFallbackFixture(
           ? "#4f8954"
           : fixture.kind === "cold_case"
             ? "#d8e6e8"
-            : "#78634d";
+            : fixture.kind === "frozen_case"
+              ? "#bfe3f2"
+              : fixture.kind === "hot_case"
+                ? "#e8a24a"
+                : "#78634d";
   rect(context, bounds.x, bounds.y, bounds.width, bounds.height, fill, "#344650", 2);
 }
 

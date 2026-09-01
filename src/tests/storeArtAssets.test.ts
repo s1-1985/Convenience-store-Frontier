@@ -46,6 +46,17 @@ describe("store art asset mapping", () => {
     expect(resolveFixtureStockState(fixture, snapshot)).toBe("empty");
   });
 
+  it("leaves frozen_case/hot_case fixtures without art undrawn (fallback rectangle applies)", () => {
+    // No StoreCategoryId targets these temperature-zone kinds yet (see
+    // docs/store-fixture-zones.md), so resolveFixtureArtIndex must keep returning
+    // undefined for them until a category and fixture-bases.png cells exist.
+    const snapshot = createStoreOperationsEngine(1977).getSnapshot();
+    const frozenCase = { id: "frozen-test", kind: "frozen_case" as const, tiles: [], customerServicePoints: [], staffServicePoints: [] };
+    const hotCase = { id: "hot-test", kind: "hot_case" as const, tiles: [], customerServicePoints: [], staffServicePoints: [] };
+    expect(resolveFixtureArtIndex(frozenCase, snapshot)).toBeUndefined();
+    expect(resolveFixtureArtIndex(hotCase, snapshot)).toBeUndefined();
+  });
+
   it("selects direction from the next path tile", () => {
     expect(resolveAgentFacing({ x: 4, y: 4, path: [{ x: 5, y: 4 }] })).toBe("right");
     expect(resolveAgentFacing({ x: 4, y: 4, path: [{ x: 3, y: 4 }] })).toBe("left");

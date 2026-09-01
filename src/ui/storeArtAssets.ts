@@ -1,4 +1,5 @@
 import type {
+  FixtureKind,
   StoreCustomerAgent,
   StoreFixture,
   StoreOperationsSnapshot,
@@ -56,6 +57,13 @@ const FIXTURE_INDEX: Record<string, number> = {
   waste: 9,
   backroom: 10,
   empty: 11,
+};
+
+// fixture-bases.png cell per FixtureKind (data/assets/store/fixtures-manifest.json).
+// frozen_case/hot_case have no cells yet — see the comment at their use site.
+const FIXTURE_BASE_INDEX: Partial<Record<FixtureKind, number>> = {
+  shelf: 0,
+  cold_case: 1,
 };
 
 const STAFF_ROW: Record<StoreStaffTask, number> = {
@@ -222,7 +230,11 @@ export function drawFixtureArtwork(
   const index = resolveFixtureArtIndex(fixture, snapshot);
   if (index === undefined) return undefined;
 
-  const rotatable = fixture.kind === "shelf" || fixture.kind === "cold_case";
+  const rotatable =
+    fixture.kind === "shelf" ||
+    fixture.kind === "cold_case" ||
+    fixture.kind === "frozen_case" ||
+    fixture.kind === "hot_case";
   const rotated = rotatable && bounds.height > bounds.width;
   const longFootprint = Math.max(bounds.width, bounds.height);
   const widthFactor = fixture.kind === "register" ? 1.16 : fixture.kind === "waste" ? 1.28 : 1.12;
@@ -249,13 +261,21 @@ export function drawFixtureArtwork(
 
   context.save();
   context.imageSmoothingEnabled = false;
-  const isMerchandiseFixture = fixture.kind === "shelf" || fixture.kind === "cold_case";
+  const isMerchandiseFixture =
+    fixture.kind === "shelf" ||
+    fixture.kind === "cold_case" ||
+    fixture.kind === "frozen_case" ||
+    fixture.kind === "hot_case";
   const drawFixtureLayers = (target: DrawBounds): void => {
     if (!isMerchandiseFixture || !fixture.categoryId) {
       drawAtlasCell(context, assets.fixtures, index, 4, FIXTURE_CELL_WIDTH, FIXTURE_CELL_HEIGHT, target);
       return;
     }
-    const baseIndex = fixture.kind === "cold_case" ? 1 : 0;
+    // frozen_case/hot_case have no fixture-bases.png cells yet (see
+    // docs/store-fixture-zones.md) and no StoreCategoryId targets them, so
+    // fixture.categoryId can only be set here for shelf/cold_case today — this branch
+    // stays unreachable for the new kinds until both the art and a category exist.
+    const baseIndex = FIXTURE_BASE_INDEX[fixture.kind] ?? 0;
     drawAtlasCell(context, assets.fixtureBases, baseIndex, FIXTURE_BASE_COLUMNS, FIXTURE_CELL_WIDTH, FIXTURE_CELL_HEIGHT, target);
     const merchandiseIndex = MERCHANDISE_INDEX[fixture.categoryId];
     const state = resolveFixtureStockState(fixture, snapshot);
