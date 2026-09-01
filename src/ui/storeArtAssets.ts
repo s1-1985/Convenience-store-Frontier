@@ -85,7 +85,7 @@ const FACING_COLUMN: Record<AgentFacing, number> = {
 // spawnCustomer, which prefers the cohort-weighted archetype pools built in
 // storeGameRuntime.ts (see COHORT_ARCHETYPE_ROWS there) when scenario data is
 // loaded, and otherwise falls back to a uniform pick across all rows.
-const CUSTOMER_ROWS = Array.from({ length: 24 }, (_, index) => index);
+const CUSTOMER_ROWS = Array.from({ length: 32 }, (_, index) => index);
 
 const ASSET_URLS = {
   fixtures: "/assets/store/fixtures.png",
@@ -401,6 +401,6 @@ export const STORE_ART_ATLAS_SPEC = {
   fixtureBases: { width: 1536, height: 256, columns: 4, rows: 1 },
   merchandise: { width: 2688, height: 256, columns: 7, rows: 1 },
   staff: { width: 768, height: 768, columns: 4, rows: 3 },
-  customers: { width: 640, height: 5280, columns: 4, rows: 24 },
+  customers: { width: 640, height: 7040, columns: 4, rows: 32 },
   icons: { width: 1024, height: 128, columns: 8, rows: 1 },
 } as const;
