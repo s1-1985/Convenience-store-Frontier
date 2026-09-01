@@ -80,6 +80,13 @@ export interface SimulationSnapshot {
     backlogByTask: OperationTaskRecord;
   };
   habits: HabitSystemSnapshot;
+  /**
+   * Player-store visits computed for the most recently processed slot (see
+   * playerVisitsThisSlot in processSlot()). Lets a presentation layer (e.g.
+   * src/ui/storeGameRuntime.ts's visual store canvas) calibrate how many
+   * representative customers to show without re-deriving demand itself.
+   */
+  lastSlotPlayerVisits: number;
 }
 
 interface CohortSlotRecord {
@@ -167,6 +174,7 @@ export function createSimulation(
   let clock: SimClock = createInitialClock();
   let finished = false;
   let cash = scenario.playerStore.initialCash;
+  let lastSlotPlayerVisits = 0;
 
   const playerStore: StoreDefinition = {
     ...scenario.playerStore,
@@ -502,6 +510,7 @@ export function createSimulation(
       planNextDayOrders();
     }
 
+    lastSlotPlayerVisits = playerVisitsThisSlot;
     clock = nextClock(clock);
 
     if (dayJustEnded) {
@@ -535,6 +544,7 @@ export function createSimulation(
           backlogByTask: operations.getBacklog(),
         },
         habits: habits.getSnapshot(),
+        lastSlotPlayerVisits,
       };
     },
 

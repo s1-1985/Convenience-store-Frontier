@@ -263,7 +263,16 @@ function visualTimeScale(): number {
   return 1;
 }
 
+// Slots are 15 real-simulated minutes (see src/simulation/clock.ts), and the visual
+// engine's own arrival rate is expressed per its own in-game minute, so the real
+// engine's per-slot visit count converts directly by dividing by 15.
+const SLOT_MINUTES = 15;
+
 function arrivalRatePerMinute(): number {
+  const session = gameSession();
+  if (session) {
+    return session.session.simulation.getSnapshot().lastSlotPlayerVisits / SLOT_MINUTES;
+  }
   const hour = currentHour();
   const base = hour < 10 ? 5.2 : hour < 14 ? 8.2 : hour < 18 ? 4.4 : 6.3;
   const aggregateQueue = numberFrom(optional("queue-metric")?.textContent);

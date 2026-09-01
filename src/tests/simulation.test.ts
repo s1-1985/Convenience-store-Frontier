@@ -101,4 +101,24 @@ describe("createSimulation", () => {
     expect(() => sim.applyPolicy({ type: "set_staffing", timeBlock: "morning", count: 5 })).toThrow();
     expect(() => sim.applyPolicy({ type: "set_staffing", timeBlock: "morning", count: 0 })).toThrow();
   });
+
+  it("exposes the player visit count for the most recently processed slot", () => {
+    const scenario = loadTestScenario();
+    const sim = createSimulation(scenario, 1977);
+
+    expect(sim.getSnapshot().lastSlotPlayerVisits).toBe(0);
+
+    // Advance into the morning rush, when the store is open and cohorts have
+    // potential demand, so at least one slot should register a positive visit count.
+    for (let i = 0; i < 20 && sim.getSnapshot().lastSlotPlayerVisits <= 0; i += 1) {
+      sim.advanceSlot();
+    }
+    expect(sim.getSnapshot().lastSlotPlayerVisits).toBeGreaterThan(0);
+
+    // Closed-store slots (well past closing) should show no player visits.
+    while (sim.getSnapshot().day === 1) {
+      sim.advanceSlot();
+    }
+    expect(sim.getSnapshot().lastSlotPlayerVisits).toBe(0);
+  });
 });
