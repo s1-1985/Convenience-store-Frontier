@@ -102,3 +102,29 @@ snacks/instant/daily_goods/magazines)もすべてこの2種類のどちらかに
    `docs/handoffs/2026-09-01-fixture-art-brief-for-chatgpt.md`にまとめた。Claude Code側は、
    アセットが揃った後の`FixtureKind`拡張・アトラス定義・マニフェスト更新などコード側の
    組み込みを担当する。
+
+## 7. コード側の準備状況(2026-09-01時点)
+
+画像の取り込みを待たずに進められる範囲として、`FixtureKind`型と描画パイプラインの型レベルの
+準備を先行して行った。実際に絵や商品が乗る状態ではないため、プレイ上の見た目は変わっていない。
+
+- `src/game/storeOperationsEngine.ts`: `FixtureKind`に`"frozen_case"`・`"hot_case"`を追加。
+  ただしどの`StoreCategoryId`もこれらを対象にしておらず、`createDefaultStoreLayout`や
+  売場編集UIもこれらの種類の什器を一切生成しないため、**現状これらの値を持つ什器はゲーム内に
+  1つも存在しない**(型としてのみ準備済み)。
+- `src/ui/storeArtAssets.ts`: `resolveFixtureArtIndex`/`isMerchandiseFixture`/`rotatable`が
+  この2種類も温度帯什器として認識するよう更新。ただし`frozen_case`/`hot_case`用の
+  `fixture-bases.png`セルはまだ存在しないため、`FIXTURE_BASE_INDEX`にはこの2種類を意図的に
+  含めていない(存在しないセル座標を読みに行くのを防ぐため)。該当する`StoreCategoryId`が
+  今後追加されるまでは、この描画パス自体に到達しない。
+- `src/ui/storeGameRuntime.ts`: `drawFallbackFixture`(アセット未読み込み時に使われる矩形描画)
+  に、この2種類の温度帯を示す色(冷凍=氷色`#bfe3f2`、HOT=温色`#e8a24a`)を追加。実際に
+  什器が置かれるようになった際、絵が無くても最低限の見た目で描画できる。
+
+**残っている作業**(いずれもゲームデザイン側の判断が必要なため未着手):
+- 冷凍・HOT向けの新しい`StoreCategoryId`を追加するかどうか、追加する場合の商品名・価格・
+  棚容量などのバランス数値
+- デフォルト店舗レイアウトまたは売場編集UIへ`frozen_case`/`hot_case`什器を実際に配置する経路
+- ChatGPT側で生成された什器アートが届いた後の`fixture-bases.png`合成・
+  `data/assets/store/fixtures-manifest.json`更新・`FIXTURE_BASE_INDEX`/`FIXTURE_BASE_COLUMNS`
+  の実配線

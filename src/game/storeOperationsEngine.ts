@@ -8,7 +8,19 @@ export type StoreCategoryId =
   | "magazines";
 
 export type StoreStaffTask = "register" | "replenishment" | "cleaning";
-export type FixtureKind = "shelf" | "cold_case" | "register" | "backroom" | "entrance" | "waste";
+// frozen_case/hot_case are temperature-zone fixture kinds (see docs/store-fixture-zones.md).
+// No StoreCategoryId targets them yet, so no fixture of these kinds exists in
+// createDefaultStoreLayout or the layout editor's fixture catalog today; adding one
+// awaits a game-design decision on the frozen/hot product categories themselves.
+export type FixtureKind =
+  | "shelf"
+  | "cold_case"
+  | "frozen_case"
+  | "hot_case"
+  | "register"
+  | "backroom"
+  | "entrance"
+  | "waste";
 
 export interface TilePoint {
   x: number;
