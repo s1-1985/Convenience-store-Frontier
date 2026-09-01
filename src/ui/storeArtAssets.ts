@@ -42,7 +42,7 @@ const STAFF_CELL_HEIGHT = 256;
 const CUSTOMER_CELL_WIDTH = 160;
 const CUSTOMER_CELL_HEIGHT = 220;
 const ICON_CELL_SIZE = 128;
-const FIXTURE_BASE_COLUMNS = 2;
+const FIXTURE_BASE_COLUMNS = 4;
 
 const FIXTURE_INDEX: Record<string, number> = {
   entrance: 0,
@@ -60,10 +60,11 @@ const FIXTURE_INDEX: Record<string, number> = {
 };
 
 // fixture-bases.png cell per FixtureKind (data/assets/store/fixtures-manifest.json).
-// frozen_case/hot_case have no cells yet — see the comment at their use site.
 const FIXTURE_BASE_INDEX: Partial<Record<FixtureKind, number>> = {
   shelf: 0,
   cold_case: 1,
+  frozen_case: 2,
+  hot_case: 3,
 };
 
 const STAFF_ROW: Record<StoreStaffTask, number> = {
@@ -271,10 +272,11 @@ export function drawFixtureArtwork(
       drawAtlasCell(context, assets.fixtures, index, 4, FIXTURE_CELL_WIDTH, FIXTURE_CELL_HEIGHT, target);
       return;
     }
-    // frozen_case/hot_case have no fixture-bases.png cells yet (see
-    // docs/store-fixture-zones.md) and no StoreCategoryId targets them, so
-    // fixture.categoryId can only be set here for shelf/cold_case today — this branch
-    // stays unreachable for the new kinds until both the art and a category exist.
+    // frozen_case/hot_case now have real fixture-bases.png cells (see
+    // docs/store-fixture-zones.md), but no StoreCategoryId targets them yet, so
+    // fixture.categoryId can only be set here for shelf/cold_case in the live game —
+    // this branch is exercised by tests but stays unreached in play until a category
+    // is assigned to one of these kinds.
     const baseIndex = FIXTURE_BASE_INDEX[fixture.kind] ?? 0;
     drawAtlasCell(context, assets.fixtureBases, baseIndex, FIXTURE_BASE_COLUMNS, FIXTURE_CELL_WIDTH, FIXTURE_CELL_HEIGHT, target);
     const merchandiseIndex = MERCHANDISE_INDEX[fixture.categoryId];
@@ -396,7 +398,7 @@ export function drawUiIcon(
 
 export const STORE_ART_ATLAS_SPEC = {
   fixtures: { width: 1536, height: 768, columns: 4, rows: 3 },
-  fixtureBases: { width: 768, height: 256, columns: 2, rows: 1 },
+  fixtureBases: { width: 1536, height: 256, columns: 4, rows: 1 },
   merchandise: { width: 2688, height: 256, columns: 7, rows: 1 },
   staff: { width: 768, height: 768, columns: 4, rows: 3 },
   customers: { width: 640, height: 5280, columns: 4, rows: 24 },
