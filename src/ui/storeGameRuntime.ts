@@ -1405,12 +1405,23 @@ function start(): void {
   let lastTimestamp = performance.now();
   let lastSaveTimestamp = lastTimestamp;
   let knownDay = currentDay();
+  // beginDay() only reconciles cash once the visual day actually changes, which does
+  // not happen during day 1 of a fresh game/reset (knownDay already matches
+  // currentDay() by then). Reconcile once, as soon as the real session loads, so the
+  // engine doesn't sit on its own hard-coded starting cash for all of day 1.
+  let hasReconciledInitialCash = false;
 
   const getEngine = (): StoreOperationsEngine => engine;
   const replaceEngine = (next: StoreOperationsEngine): void => {
     engine = next;
     layout = next.getLayout();
     knownDay = currentDay();
+    // The new engine (a fresh createStoreOperationsEngine() on reset, or a
+    // serialize()+restore() clone on a layout edit) needs its own cash
+    // reconciliation pass — see the render loop below. Harmless to redo even when
+    // the engine already carried the right cash forward (a layout edit): it just
+    // reconfirms the same real figure.
+    hasReconciledInitialCash = false;
   };
   const layoutEditor = createStoreLayoutEditorUi({
     shell,
@@ -1429,6 +1440,13 @@ function start(): void {
     const day = currentDay();
     syncSupplyPolicy(engine);
     syncPolicyToRealEngine();
+    if (!hasReconciledInitialCash) {
+      const session = gameSession();
+      if (session) {
+        engine.setCash(session.session.simulation.getSnapshot().cash);
+        hasReconciledInitialCash = true;
+      }
+    }
     if (day !== knownDay) {
       engine.beginDay(day, gameSession()?.session.simulation.getSnapshot().cash);
       knownDay = day;

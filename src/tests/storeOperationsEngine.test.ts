@@ -527,4 +527,40 @@ describe("individual store operations engine", () => {
     engine.beginDay(2, -500);
     expect(engine.getSnapshot().cash).toBe(0);
   });
+
+  it("setCash reconciles cash immediately, without waiting for a day transition", () => {
+    const engine = createStoreOperationsEngine(1977);
+    expect(engine.getSnapshot().cash).not.toBe(3_000_000);
+    engine.setCash(3_000_000);
+    expect(engine.getSnapshot().cash).toBe(3_000_000);
+    // No day transition happened, so this is a genuine immediate-reconciliation path,
+    // not a side effect of beginDay.
+    expect(engine.getSnapshot().day).toBe(1);
+  });
+
+  it("does not let beginDay's real-cash reconciliation refund a capacity investment", () => {
+    const engine = createStoreOperationsEngine(1977);
+    const before = engine.getSnapshot().cash;
+    const result = engine.investInCategoryCapacity("drinks");
+    expect(result.ok).toBe(true);
+    const spent = before - engine.getSnapshot().cash;
+    expect(spent).toBeGreaterThan(0);
+
+    // The shared real Simulation never learns about this purchase, so its own cash
+    // is unaffected by it. Reconciling against that real figure must still net out
+    // what was spent here, instead of restoring the pre-purchase balance.
+    const realCashUnawareOfPurchase = before;
+    engine.beginDay(2, realCashUnawareOfPurchase);
+    expect(engine.getSnapshot().cash).toBe(realCashUnawareOfPurchase - spent);
+  });
+
+  it("does not let setCash's real-cash reconciliation refund a capacity investment either", () => {
+    const engine = createStoreOperationsEngine(1977);
+    const before = engine.getSnapshot().cash;
+    engine.investInCategoryCapacity("drinks");
+    const spent = before - engine.getSnapshot().cash;
+
+    engine.setCash(before);
+    expect(engine.getSnapshot().cash).toBe(before - spent);
+  });
 });
