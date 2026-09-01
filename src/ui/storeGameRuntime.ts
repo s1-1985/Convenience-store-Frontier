@@ -5,6 +5,7 @@ import {
   maxShelfTier,
   nextCapacityInvestment,
   restoreStoreOperationsEngine,
+  type CustomerArchetypePool,
   type SerializedStoreOperations,
   type StoreCategoryId,
   type StoreCustomerAgent,
@@ -21,6 +22,8 @@ import {
   type StoreStaffTask,
   type TilePoint,
 } from "../game/storeOperationsEngine.js";
+import { loadBrowserScenario } from "./browserScenario.js";
+import type { CohortDefinition, ScenarioBundle, TimeBlockId } from "../simulation/types.js";
 import { priorityStoreObjectives, type StoreObjectiveStatus } from "../game/storeObjectives.js";
 import {
   assignmentsForPreset,
@@ -50,7 +53,99 @@ const LOGICAL_WIDTH = 1080;
 const LOGICAL_HEIGHT = 500;
 const STORE_SAVE_KEY = "convenience-store-frontier.store-operations.v1";
 let storeArtAssets: StoreArtAssets | undefined;
+let cohortScenario: ScenarioBundle | undefined;
 let lastAutoStoppedIncident = "";
+
+// data/cohorts/customer_cohorts.json category ids -> StoreCategoryId. "dessert" has no
+// scenario-side counterpart yet, so it is carved out of the snacks share below instead
+// of left at zero. This mapping is an approximation between two independently-tuned
+// category taxonomies; revisit if either taxonomy changes.
+const SIM_CATEGORY_TO_STORE_CATEGORY: Record<string, StoreCategoryId> = {
+  category_ready_to_eat: "ready_meal",
+  category_beverages: "drinks",
+  category_snacks: "snacks",
+  category_processed_food: "instant",
+  category_daily_goods: "daily_goods",
+  category_magazines: "magazines",
+};
+
+function categoryWeightsForCohort(cohort: CohortDefinition): Record<StoreCategoryId, number> {
+  const weights: Record<StoreCategoryId, number> = {
+    drinks: 0,
+    dessert: 0,
+    ready_meal: 0,
+    snacks: 0,
+    instant: 0,
+    daily_goods: 0,
+    magazines: 0,
+  };
+  for (const [simCategoryId, preference] of Object.entries(cohort.categoryPreference)) {
+    const storeCategoryId = SIM_CATEGORY_TO_STORE_CATEGORY[simCategoryId];
+    if (storeCategoryId) weights[storeCategoryId] += preference;
+  }
+  const snacksShare = weights.snacks;
+  weights.snacks = snacksShare * 0.65;
+  weights.dessert = snacksShare * 0.35;
+  return weights;
+}
+
+function timeBlockForHour(scenario: ScenarioBundle, hour: number): TimeBlockId {
+  const block = scenario.timeBlocks.find((candidate) => hour >= candidate.startHour && hour < candidate.endHour);
+  return (block?.id ?? "evening") as TimeBlockId;
+}
+
+// Row indices from data/assets/store/customers-manifest.json, grouped by which of the
+// six customer_cohorts.json cohorts each archetype most plausibly represents. Rows not
+// listed here (student_university_male/female, middle_male/female, delinquent — rows
+// 5, 10, 11, 13, 19) have no corresponding CohortDefinition yet: their shopping
+// behavior and real appearance probability are not modeled. See docs/store-art-assets.md.
+const COHORT_ARCHETYPE_ROWS: Record<string, number[]> = {
+  cohort_commuter_worker: [0, 1, 14, 15, 16, 17],
+  cohort_lunch_worker: [0, 1, 14, 15, 16, 17],
+  cohort_high_school_student: [2, 12],
+  cohort_family: [4, 6, 7, 8, 9],
+  cohort_elderly: [3, 18],
+  cohort_night_worker: [20, 21, 22, 23],
+};
+const ALL_CUSTOMER_ROWS = Array.from({ length: 24 }, (_, index) => index);
+// Small flat slice of arrival weight reserved for archetypes with no modeled cohort
+// above, so those already-produced art assets still appear in play rather than never
+// being drawn. Not a claim about their real-world share of customers.
+const UNMODELED_ARCHETYPE_WEIGHT_SHARE = 0.15;
+
+function customerArchetypePools(
+  scenario: ScenarioBundle,
+  hour: number,
+  focus?: StoreCategoryId,
+): CustomerArchetypePool[] | undefined {
+  const timeBlock = timeBlockForHour(scenario, hour);
+  const pools: CustomerArchetypePool[] = scenario.cohorts
+    .map((cohort) => {
+      const categoryWeights = categoryWeightsForCohort(cohort);
+      if (focus) categoryWeights[focus] *= 1.35;
+      return {
+        categoryWeights,
+        archetypeRows: COHORT_ARCHETYPE_ROWS[cohort.id] ?? [],
+        weight: cohort.population * (cohort.activityRateByTimeBlock[timeBlock] ?? 0),
+      };
+    })
+    .filter((pool) => pool.weight > 0 && pool.archetypeRows.length > 0);
+  if (pools.length === 0) return undefined;
+
+  const modeledRows = new Set(pools.flatMap((pool) => pool.archetypeRows));
+  const unmodeledRows = ALL_CUSTOMER_ROWS.filter((row) => !modeledRows.has(row));
+  if (unmodeledRows.length > 0) {
+    const modeledWeight = pools.reduce((sum, pool) => sum + pool.weight, 0);
+    const flavorWeights = defaultCategoryWeightsForHour(hour);
+    if (focus) flavorWeights[focus] *= 1.35;
+    pools.push({
+      categoryWeights: flavorWeights,
+      archetypeRows: unmodeledRows,
+      weight: (modeledWeight * UNMODELED_ARCHETYPE_WEIGHT_SHARE) / (1 - UNMODELED_ARCHETYPE_WEIGHT_SHARE),
+    });
+  }
+  return pools;
+}
 
 interface StoreViewGeometry {
   gridX: number;
@@ -151,12 +246,14 @@ function arrivalRatePerMinute(): number {
 function engineContext(focus?: StoreCategoryId): StoreEngineContext {
   const weights = defaultCategoryWeightsForHour(currentHour());
   if (focus) weights[focus] *= 1.35;
+  const hour = currentHour();
   return {
     isOpen: isStoreOpen(),
-    hour: currentHour() + currentMinute() / 60,
+    hour: hour + currentMinute() / 60,
     arrivalRatePerMinute: arrivalRatePerMinute(),
     categoryWeights: weights,
     requestedStaffCount: currentStaffing(),
+    customerArchetypePools: cohortScenario ? customerArchetypePools(cohortScenario, hour, focus) : undefined,
   };
 }
 
@@ -1209,6 +1306,9 @@ function start(): void {
   window.addEventListener("resize", resizeCanvas);
   void loadStoreArtAssets().then((assets) => {
     storeArtAssets = assets;
+  });
+  void loadBrowserScenario().then((bundle) => {
+    cohortScenario = bundle;
   });
 
   const seed = Math.round(numberFrom(optional<HTMLInputElement>("seed-input")?.value) || 1977);

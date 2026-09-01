@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "cell": { "width": 160, "height": 220 },
+  "facingColumns": { "front": 0, "left": 1, "right": 2, "back": 3 },
+  "archetypes": {
+    "office_30s_male": { "row": 0, "label": "30〜40代社会人(男)", "ageBand": "30s_40s", "gender": "male", "occupation": "office_worker" },
+    "office_20s_female": { "row": 1, "label": "20代社会人(女)", "ageBand": "20s", "gender": "female", "occupation": "office_worker" },
+    "student_high_male": { "row": 2, "label": "高校生(男)", "ageBand": "teens", "gender": "male", "occupation": "student" },
+    "elderly_male": { "row": 3, "label": "高齢者(男)", "ageBand": "elderly", "gender": "male", "occupation": null },
+    "housewife": { "row": 4, "label": "主婦", "ageBand": "30s_40s", "gender": "female", "occupation": "homemaker" },
+    "student_university_male": { "row": 5, "label": "大学生(男)", "ageBand": "20s", "gender": "male", "occupation": "student" },
+    "preschool_male": { "row": 6, "label": "未就学児(男)", "ageBand": "preschool", "gender": "male", "occupation": null },
+    "preschool_female": { "row": 7, "label": "未就学児(女)", "ageBand": "preschool", "gender": "female", "occupation": null },
+    "elementary_male": { "row": 8, "label": "小学生(男)", "ageBand": "child", "gender": "male", "occupation": "student" },
+    "elementary_female": { "row": 9, "label": "小学生(女)", "ageBand": "child", "gender": "female", "occupation": "student" },
+    "middle_male": { "row": 10, "label": "中学生(男)", "ageBand": "teens", "gender": "male", "occupation": "student" },
+    "middle_female": { "row": 11, "label": "中学生(女)", "ageBand": "teens", "gender": "female", "occupation": "student" },
+    "student_high_female": { "row": 12, "label": "高校生(女)", "ageBand": "teens", "gender": "female", "occupation": "student" },
+    "student_university_female": { "row": 13, "label": "大学生(女)", "ageBand": "20s", "gender": "female", "occupation": "student" },
+    "office_20s_male": { "row": 14, "label": "20代社会人(男)", "ageBand": "20s", "gender": "male", "occupation": "office_worker" },
+    "office_30s_female": { "row": 15, "label": "30〜40代社会人(女)", "ageBand": "30s_40s", "gender": "female", "occupation": "office_worker" },
+    "office_50s_male": { "row": 16, "label": "50〜60代社会人(男)", "ageBand": "50s_60s", "gender": "male", "occupation": "office_worker" },
+    "office_50s_female": { "row": 17, "label": "50〜60代社会人(女)", "ageBand": "50s_60s", "gender": "female", "occupation": "office_worker" },
+    "elderly_female": { "row": 18, "label": "高齢者(女)", "ageBand": "elderly", "gender": "female", "occupation": null },
+    "delinquent": { "row": 19, "label": "不良", "ageBand": "teens", "gender": "male", "occupation": null },
+    "unemployed": { "row": 20, "label": "無職", "ageBand": "20s_30s", "gender": "male", "occupation": "unemployed" },
+    "truck_driver": { "row": 21, "label": "トラックドライバー", "ageBand": "adult", "gender": "male", "occupation": "truck_driver" },
+    "construction_worker": { "row": 22, "label": "土方", "ageBand": "adult", "gender": "male", "occupation": "construction_worker" },
+    "blue_collar": { "row": 23, "label": "ブルーカラー", "ageBand": "adult", "gender": "male", "occupation": "factory_worker" }
+  },
+  "notes": "rows 0-5 are the original approved variants (kept for compatibility, ids added retroactively). Rows 6-23 are new. This manifest only documents art layout; spawn-probability-by-district and per-archetype shopping-behavior weighting are not implemented yet and are tracked separately."
+}

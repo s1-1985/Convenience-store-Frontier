@@ -472,4 +472,37 @@ describe("individual store operations engine", () => {
     expect(leadsToPartner || rerouted!.state !== "walking_to_shelf").toBe(true);
     expect(leadsToOriginal && rerouted!.state === "walking_to_shelf").toBe(false);
   });
+
+  it("spawns customers across the full sprite row range when no archetype pool is given", () => {
+    const engine = createStoreOperationsEngine(2024);
+    run(engine, 220, context({ arrivalRatePerMinute: 30 }));
+    const variants = new Set(engine.getSnapshot().customers.map((customer) => customer.variant));
+    for (const variant of variants) {
+      expect(variant).toBeGreaterThanOrEqual(0);
+      expect(variant).toBeLessThan(24);
+    }
+    // With enough arrivals and the full 0-23 range available, at least one spawn
+    // should land outside the old (bugged) 0-7 range.
+    expect([...variants].some((variant) => variant >= 8)).toBe(true);
+  });
+
+  it("draws spawned customers only from the given archetype pool's rows and category weights", () => {
+    const engine = createStoreOperationsEngine(2024);
+    const pooledContext = context({
+      arrivalRatePerMinute: 30,
+      customerArchetypePools: [
+        {
+          categoryWeights: { drinks: 0, dessert: 0, ready_meal: 1, snacks: 0, instant: 0, daily_goods: 0, magazines: 0 },
+          archetypeRows: [3, 18],
+          weight: 1,
+        },
+      ],
+    });
+    run(engine, 220, pooledContext);
+    const customers = engine.getSnapshot().customers;
+    expect(customers.length).toBeGreaterThan(0);
+    for (const customer of customers) {
+      expect([3, 18]).toContain(customer.variant);
+    }
+  });
 });
