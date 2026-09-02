@@ -1,7 +1,7 @@
 # HANDOFF — 引き継ぎメモ
 
-最終更新: 2026-09-02(セッションID `session_01HFBAPTpwGrisZzQDHP8Thd`)
-対象ブランチ: `claude/in-store-management-system-yx41hd`(mainに追従、都度リセットして使う運用)
+最終更新: 2026-09-02(セッションID `session_01KGvF2q3A9ckA45UX6stZaJ`)
+対象ブランチ: `claude/review-md-files-ny37xl`(mainに追従、都度リセットして使う運用)
 
 このファイルは、直近セッションで決まった仕様・実施した作業・積み残しの課題を、
 次のセッション(別のClaude Codeインスタンス)が読むだけで状況を把握できるように
@@ -78,6 +78,29 @@ ChatGPT側の設計判断を仰ぐこと(詳細は2.6参照)。
 
 このセッションでは、ChatGPT製アセットの取り込み(下記2.1)には着手していない
 (アセット生成は引き続きChatGPT側の担当という方針のまま)。
+
+### 0.6 別セッション(同日、`session_01KGvF2q3A9ckA45UX6stZaJ`)での追加作業
+
+上記0.1〜0.5の少し後、同じ2026-09-02に、別のClaude Codeセッションが
+ユーザーから「積み残し課題をどんどん進めて」という指示を受けて以下を実施した:
+
+- **フェーズ2a着手(PR #63、マージ済み)**: 2.5「商品単位とカテゴリ単位の完全
+  統合」のうち、バランス数値の新規決定を伴わない範囲として、本物の
+  `Simulation`が報告する商品単位の欠品状況をカテゴリ単位に集計し、店内Canvas
+  (`StoreOperationsEngine`)の翌日納品量へバイアスとして反映する変更を追加した。
+  既存の「棚在庫が減る→空になる→警告が出る」という視覚フィードバックループは
+  変更していない(あくまで納品量だけに影響)。詳細は
+  `docs/visual-numeric-engine-integration.md`の「フェーズ2a」を参照。
+- **ChatGPT製アセット原本のgit管理化**: ユーザーが2.1で言及されていた3つの
+  ZIPのうち`conveniencestorefrontieradoptedassetscharacters.zip`と
+  `conveniencestorefrontieradoptedassetsfixtures.zip`を再アップロードし、
+  「gitで管理しておいて。いつでも使えるように」と指示。展開した原本
+  (什器・商品モジュール・キャラクターのスプライトシート、ChatGPT側の
+  `ASSET_SPEC.md`含む)を`art-source/chatgpt-adopted-v1/`へコミットした
+  (`data/`ではなくその外側 — `data/`はVite`publicDir`のためビルド成果物へ
+  そのままコピーされてしまう)。これにより**次のセッションはもう再アップロード
+  不要**(下記2.1・5を参照)。まだ個体切り出し・アトラスへの統合作業(2.1の
+  残り)自体は未着手。
 
 ---
 
@@ -186,12 +209,15 @@ Codexレビューで実バグ2件が見つかり修正済み:
 
 ## 2. 積み残しの課題(次にやるべきこと)
 
-### 2.1 最優先: ChatGPT製アセットの続き(要・元ZIPの再提供)
+### 2.1 最優先: ChatGPT製アセットの続き
 
-以下は**このセッションで内容を目視確認済み**だが、まだ切り出し・組み込みを
-行っていない。元のZIPファイルは`/root/.claude/uploads/`配下にあり**次の
-セッションには持ち越されない**ため、作業を再開するにはユーザーに同じ3つの
-ZIPを再アップロードしてもらう必要がある。
+以下は目視確認済みだが、まだ切り出し・組み込みを行っていない。**2026-09-02の
+0.6作業で、fixtures/characters(採用版)2ZIPの中身は`art-source/chatgpt-adopted-v1/`
+へgitコミット済みのため、これらの分は再アップロード不要**(`art-source/README.md`
+参照)。ただし`conveniencestorefrontierapprovedassetsv1.zip`(3つ目、最初の
+非採用込みパック)はまだ未取得 — 採用版パック(fixtures/characters)の内容が
+これを実質的に包含しているとの記載があるため(ASSET_SPEC.md参照)、通常は
+不要と見込まれるが、差分が必要になった場合のみ再アップロードを依頼すること。
 
 **未使用の什器シート(いずれもイラスト調、画風不一致は許容済み)**:
 - `コンビニ什器ピクセルアート素材集.png` — 常温ゴンドラ・エンド什器・
@@ -337,6 +363,6 @@ ChatGPT製キャラクターアセットには4方向×3コマの歩行差分が
 
 ## 5. このセッション固有の一時ファイル(次のセッションには残らない)
 
-- `/root/.claude/uploads/7033ef0c-.../*.zip` — ChatGPT製アセットの元ZIP3つ。**再利用するには再アップロードが必要**
+- `/root/.claude/uploads/7033ef0c-.../*.zip` — ChatGPT製アセットの元ZIP3つ。**うちfixtures/characters(採用版)2つは2026-09-02(0.6)に`art-source/chatgpt-adopted-v1/`へgitコミット済みのため、この項目自体は解消済み**(3つ目のv1パックのみ、必要になれば再アップロード対象。2.1参照)
 - `/tmp/claude-0/.../scratchpad/` — 展開・切り出し済みの中間ファイル、`split_sheet.py`(alpha連結成分による自動分割スクリプト)、各種確認用コンタクトシート。すべて揮発性
 - `/root/.claude/plans/frolicking-wibbling-panda.md` — 数値エンジン統合フェーズ1(ステップA〜D)の計画書。内容は`docs/visual-numeric-engine-integration.md`に集約済みなので参照不要
