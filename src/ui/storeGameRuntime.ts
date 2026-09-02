@@ -37,6 +37,11 @@ import {
   type StoreStaffPreset,
 } from "../game/storeStaffing.js";
 import { recommendSupplyPolicy } from "../game/storeSupplyAdvisor.js";
+import {
+  categoryAreaFromShelfCapacity,
+  SIM_CATEGORY_TO_STORE_CATEGORY,
+  taskPrioritiesFromStaffAssignments,
+} from "../game/storeCanvasPolicySync.js";
 import { computeRevenueTrend, summarizeStorePerformance } from "../game/storePerformance.js";
 import { detectStoreIncidents } from "../game/storeIncidents.js";
 import {
@@ -69,20 +74,6 @@ function gameSession(): GameSessionState | undefined {
   return peekGameSession();
 }
 
-// data/cohorts/customer_cohorts.json category ids -> StoreCategoryId. "dessert" has no
-// scenario-side counterpart yet, so it is carved out of the snacks share below instead
-// of left at zero. This mapping is an approximation between two independently-tuned
-// category taxonomies; revisit if either taxonomy changes.
-const SIM_CATEGORY_TO_STORE_CATEGORY: Record<string, StoreCategoryId> = {
-  category_ready_to_eat: "ready_meal",
-  category_beverages: "drinks",
-  category_snacks: "snacks",
-  category_processed_food: "instant",
-  category_daily_goods: "daily_goods",
-  category_magazines: "magazines",
-  category_frozen_food: "frozen",
-  category_hot_snack: "hot",
-};
 
 function categoryWeightsForCohort(cohort: CohortDefinition): Record<StoreCategoryId, number> {
   const weights: Record<StoreCategoryId, number> = {
@@ -381,10 +372,10 @@ let lastAppliedPolicySignature = "";
 // delivery policy form values that syncSupplyPolicy() already feeds into the visual
 // engine every frame, but into the real numeric Simulation too (see
 // src/ui/gameSession.ts) — so changes made from this screen reach the real economy
-// without needing main.ts's separate "方針を反映" button. set_category_area and
-// set_task_priorities are not synced here yet: shelf-area/tile-layout unification is
-// a later migration phase (see the plan in the session that added this).
-function syncPolicyToRealEngine(): void {
+// without needing main.ts's separate "方針を反映" button. Also syncs task priorities
+// (from the staff panel's per-task headcount) and category area (from shelf-tier
+// investment) via the ADR-0005 conversions above.
+function syncPolicyToRealEngine(engine: StoreOperationsEngine): void {
   const session = gameSession();
   if (!session) return;
   const opening = numberFrom(optional<HTMLSelectElement>("opening-hour-select")?.value) || 8;
@@ -397,8 +388,13 @@ function syncPolicyToRealEngine(): void {
       Math.max(1, Math.round(numberFrom(optional<HTMLInputElement>(`staff-${block}`)?.value) || 2)),
     ]),
   ) as Record<TimeBlockId, number>;
+  const snapshot = engine.getSnapshot();
+  const assignments = snapshot.assignments;
+  const shelfCapacities = Object.fromEntries(
+    Object.entries(snapshot.inventories).map(([categoryId, inventory]) => [categoryId, inventory.shelfCapacity]),
+  );
 
-  const signature = JSON.stringify({ opening, closing, ordering, delivery, staffing });
+  const signature = JSON.stringify({ opening, closing, ordering, delivery, staffing, assignments, shelfCapacities });
   if (signature === lastAppliedPolicySignature) return;
   lastAppliedPolicySignature = signature;
 
@@ -414,6 +410,19 @@ function syncPolicyToRealEngine(): void {
       simulation.applyPolicy({ type: "set_staffing", timeBlock: block, count });
     }
   }
+  const currentPriorities = simulation.getSnapshot().playerStore.taskPriorities;
+  simulation.applyPolicy({
+    type: "set_task_priorities",
+    priorities: taskPrioritiesFromStaffAssignments(assignments, currentPriorities),
+  });
+  simulation.applyPolicy({
+    type: "set_category_area",
+    categoryArea: categoryAreaFromShelfCapacity(
+      snapshot.inventories,
+      session.scenario.categories,
+      session.scenario.economy.totalShelfAreaPoints,
+    ),
+  });
 }
 
 function tilePixel(tile: TilePoint, geometry: StoreViewGeometry): { x: number; y: number } {
@@ -1512,7 +1521,7 @@ function start(): void {
     lastTimestamp = timestamp;
     const day = currentDay();
     syncSupplyPolicy(engine);
-    syncPolicyToRealEngine();
+    syncPolicyToRealEngine(engine);
     if (!hasReconciledInitialCash) {
       const session = gameSession();
       if (session) {

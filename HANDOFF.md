@@ -198,6 +198,35 @@ PR #68(0-B、冷凍食品カテゴリ)がユーザーによりマージされた
   すべてに対応する`StoreCategoryId`が揃った。
 - Playwrightでの実機確認は0-Bと同じ環境制約により今回も未実施。
 
+## 0-D. 続く同日セッション(2026-09-02、Canvas→数値エンジンの作業優先順位・売場配置の即時反映)
+
+PR #69(0-C、ホットスナックカテゴリ)がユーザーによりマージされたのを受け、「続けて」
+という指示で作業を継続。2.6で保留されていた「作業優先順位・売場配置をCanvas側から
+即時反映する」変換規則を、`design/DECISIONS/ADR-0005-canvas-task-priority-and-category-area-sync.md`
+として決定・実装した。
+
+- **作業優先順位**: Canvas「人員」パネルの人数配分(register/replenishment/
+  cleaningの3種)を、Simulation側の優先順リスト(5種)のうちこの3タスクの
+  相対順位だけに変換する(人数の多い順、同数はSimulation側の現在の相対順序を
+  維持)。Canvas側に概念の無いdelivery_receiving・adminは、現在の優先順リストの
+  絶対位置から動かさない(2.6が挙げた2案のうち「元の位置を維持する」側を採用)。
+- **売場配置**: Canvas側の各カテゴリの`shelfCapacity`(什器拡張後の実容量)を
+  重みとして、Simulation側の`categoryArea`(点数配分、合計70点固定)へ比例配分。
+  `dessert`(Simulation側に対応カテゴリが無い)の容量は`category_snacks`の重みへ
+  合算。丸め誤差は`src/balance/benchmark.ts`の`weightedCategoryArea()`と同じ
+  「最後のカテゴリへ残差を代入」する手法で吸収し、`set_category_area`が要求する
+  厳密な合計一致を機械的に満たす。
+- 変換ロジックを`src/game/storeCanvasPolicySync.ts`(新規、DOM非依存の純粋関数
+  モジュール)へ切り出し、`SIM_CATEGORY_TO_STORE_CATEGORY`マッピングもここへ
+  移設。`storeGameRuntime.ts`の`syncPolicyToRealEngine()`が`StoreOperationsEngine`
+  を引数に取るよう変更し、既存(営業時間・人員合計・発注/納品方針)と同じ
+  署名(シグネチャ)ベースの重複適用防止に組み込んだ。
+- 単体テスト`src/tests/storeCanvasPolicySync.test.ts`(8件)を追加。
+  `npx tsc --noEmit -p .`・`npx vitest run`(173件全通過)・`npm run balance:ci`
+  (Canvasを経由しないため直接の影響は無いが、既存の合格基準を維持)で確認済み。
+- Playwrightでの実機確認は0-B/0-Cと同じ環境制約により今回も未実施。
+- 詳細は`docs/visual-numeric-engine-integration.md`「フェーズ2b」を参照。
+
 ## 1. このセッションでやったこと(時系列サマリ)
 
 ### 1.1 前半: バグ修正・客層拡張(PR #52, #53)
@@ -395,17 +424,26 @@ ChatGPT製キャラクターアセットには4方向×3コマの歩行差分が
 
 ### 2.5 数値エンジン統合フェーズ2(`docs/visual-numeric-engine-integration.md`参照)
 
-- 棚面積(`categoryArea`点数配分)とタイル什器レイアウトの統合
+- 棚面積(`categoryArea`点数配分)とタイル什器レイアウトの統合(什器の物理配置
+  そのものの統合。点数の同期自体は2.6参照、解消済み)
 - 商品単位とカテゴリ単位の完全統合(在庫欠品表示を含む)
 - スロット単位で来店客1人1人を数値エンジンと厳密に対応させる演出
-- `set_category_area`/`set_task_priorities`をCanvas側から即時反映すること
+- ~~`set_category_area`/`set_task_priorities`をCanvas側から即時反映すること~~
+  → 2.6参照、解消済み
 
-### 2.6 上記のうち「Canvas側から即時反映」着手時に検討すべき具体的な論点
+### 2.6 「Canvas側から即時反映」の変換規則 → 解消済み(2026-09-02)
 
-2026-09-02のセッションで、営業時間・人員数・発注/納品方針と同じ要領で即時反映
-できないか検討したが、以下の理由で**モデルの対応関係を先に決める必要がある**
-と判断し、着手を見送った(ユーザーへ確認し「技術的な穴埋めを継続」を選択、
-この2項目は保留のまま)。
+2026-09-02の前セッションで、営業時間・人員数・発注/納品方針と同じ要領で即時反映
+できないか検討したが、モデルの対応関係(作業優先順位: 人数配分→順序リストの
+変換規則、売場配置: 物理棚容量→点数配分の変換規則)を先に決める必要があると
+判断し、着手を見送っていた(下記は当時の論点の記録)。
+
+続く同日セッション(上記0-D参照)で、`design/DECISIONS/ADR-0005-canvas-task-priority-and-category-area-sync.md`
+として変換規則を決定・実装済み。作業優先順位は「Canvas側の人数の多い順、
+delivery_receiving/adminは現在の絶対位置を維持」、売場配置は「Canvas側の
+shelfCapacityを重みとした比例配分、残差は最後のカテゴリへ」を採用した。
+
+当時の論点(参考、いずれもADR-0005で解決済み):
 
 **作業優先順位(`set_task_priorities`)**:
 - 数値エンジン側は`OperationTaskId`(register/replenishment/cleaning/
@@ -415,10 +453,6 @@ ChatGPT製キャラクターアセットには4方向×3コマの歩行差分が
 - Canvas側(店内Canvasの「人員」パネル)は店員一人ひとりに register/
   replenishment/cleaning のいずれか1タスクを**人数で割り当てる**モデルで、
   delivery_receiving・adminに対応する概念が無い
-- 人数配分→優先順リストへの変換は複数のもっともらしい案があり得る(単純に
-  人数の多い順に並べる、delivery_receiving/adminは現在の順序内の元の位置を
-  維持する、等)。挙動への影響が読みにくいため、どの変換にするかはユーザー
-  またはChatGPT側の判断を仰ぐこと
 
 **売場配置(`set_category_area`)**:
 - 数値エンジン側は`categoryArea`という「カテゴリごとの点数配分(合計固定70点)」
@@ -426,8 +460,6 @@ ChatGPT製キャラクターアセットには4方向×3コマの歩行差分が
 - Canvas側は物理的なタイル什器レイアウト(`StoreLayout.fixtures`)で、対応する
   操作も「設備投資(棚容量+6ずつ拡張)」「陳列替え(什器2つのカテゴリを
   入れ替え)」であり、categoryAreaの点数とは単位も意味も異なる
-- 什器拡張額・棚容量の増分とcategoryAreaの点数をどう対応させるかはバランス
-  数値の決定そのものであり、Claude Codeが独断で決めるべきではない
 
 ---
 
@@ -447,7 +479,7 @@ ChatGPT製キャラクターアセットには4方向×3コマの歩行差分が
 ## 4. 参照ドキュメント索引
 
 - `design/PRINCIPLES.md` — ゲームデザインの憲法(絶対に守ること・中核的な設計原則・本作固有の面白さ。CLAUDE.md指定の必読)
-- `design/DECISIONS/ADR-*.md` — 設計判断の記録(ADR-0001: AI協業の役割分担変更、ADR-0002: 文化カード等の復元、ADR-0003: 冷凍食品カテゴリ追加、ADR-0004: ホットスナックカテゴリ追加)
+- `design/DECISIONS/ADR-*.md` — 設計判断の記録(ADR-0001: AI協業の役割分担変更、ADR-0002: 文化カード等の復元、ADR-0003: 冷凍食品カテゴリ追加、ADR-0004: ホットスナックカテゴリ追加、ADR-0005: Canvas作業優先順位・売場配置の即時反映変換規則)
 - `docs/game-design.md` / `docs/vertical-slice.md` / `docs/architecture.md` — 正本(CLAUDE.md指定の必読)
 - `docs/free-play-roadmap.md` — フリープレイ実装ロードマップ(進捗を随時更新すること)
 - `docs/store-fixture-zones.md` — 什器の温度帯区分・年代別ビジュアル方針、ザ・コンビニ調査結果
