@@ -52,11 +52,13 @@ main.tsの「方針を反映」ボタンを押すまで数値エンジンに届�
 
 ## フェーズ2として明確に後回しにしているもの(既存の合意事項)
 
-1. 棚面積(`categoryArea`点数配分)とタイル什器レイアウトの統合
+1. 棚面積(`categoryArea`点数配分)とタイル什器レイアウトの統合(什器の物理配置
+   そのものの統合。数値の同期自体は下記フェーズ2bで着手済み)
 2. 商品単位とカテゴリ単位の完全統合(在庫欠品表示を含む、上記参照) — 下記
    「フェーズ2a」参照。一部着手済み
 3. スロット単位で来店客1人1人を数値エンジンと厳密に対応させる演出
-4. `set_category_area`/`set_task_priorities`をCanvas側から即時反映すること
+4. ~~`set_category_area`/`set_task_priorities`をCanvas側から即時反映すること~~
+   → 下記「フェーズ2b」参照。着手済み
 
 ## フェーズ2a: 実欠品シビアリティによる翌日納品量のバイアス(2026-09-02、着手)
 
@@ -90,6 +92,53 @@ main.tsの「方針を反映」ボタンを押すまで数値エンジンに届�
 - 商品単位バッチとCanvasのカテゴリ単位在庫の完全統合(在庫数そのものの同期)
 - `resolveFixtureStockState`などの表示ロジックを本物の商品単位欠品から直接
   算出する経路
+
+## フェーズ2b: 作業優先順位・売場配置のCanvas→数値エンジン即時反映(2026-09-02、着手)
+
+上記フェーズ2の4「`set_category_area`/`set_task_priorities`をCanvas側から即時
+反映すること」に、`design/DECISIONS/ADR-0005-canvas-task-priority-and-category-area-sync.md`
+で決定した変換規則に沿って着手した。営業時間・人員(時間帯別合計)・発注方針・
+納品方針と同じく、`main.ts`の「方針を反映」ボタンを押さずとも即座に数値エンジンへ
+反映されるようになった。
+
+- 変換ロジックを`src/game/storeCanvasPolicySync.ts`(新規、DOM非依存の純粋関数
+  モジュール。既存の`storeSupplyAdvisor.ts`等と同じ設計)へ切り出した:
+  - `taskPrioritiesFromStaffAssignments()`: Canvas「人員」パネルの人数配分
+    (`StoreStaffAssignments`、register/replenishment/cleaningの3種)を、
+    Simulation側の優先順リスト(`OperationTaskId`5種)における
+    register/replenishment/cleaningの相対順位だけに変換する。人数の多い順に
+    並べ替え、同数はSimulation側の現在の相対順序を維持。Canvas側に概念の無い
+    delivery_receiving・adminは、Simulation側の現在の優先順リストにおける
+    絶対位置(スロット)から動かさない
+  - `categoryAreaFromShelfCapacity()`: Canvas側の各カテゴリの`shelfCapacity`
+    (什器拡張後の実容量)を重みとして、Simulation側の`categoryArea`(点数配分、
+    合計`economy.totalShelfAreaPoints`)へ比例配分する。`dessert`
+    (Simulation側に対応カテゴリが無い)の容量は`category_snacks`の重みへ合算する。
+    丸め誤差は`src/balance/benchmark.ts`の`weightedCategoryArea()`と同じ
+    「最後のカテゴリへ残差を代入」する手法で吸収し、`set_category_area`が要求する
+    厳密な合計一致を機械的に満たす
+  - `SIM_CATEGORY_TO_STORE_CATEGORY`マッピングも同モジュールへ集約(従来
+    `storeGameRuntime.ts`にあったものを移設、`storeGameRuntime.ts`側は import
+    して使用)
+- `storeGameRuntime.ts`の`syncPolicyToRealEngine()`が`StoreOperationsEngine`を
+  引数に取るよう変更し、`engine.getSnapshot().assignments`/`.inventories`を
+  読み取って上記2つの変換を適用、既存と同じ署名(シグネチャ)ベースの重複適用
+  防止に組み込んだ
+- 単体テスト`src/tests/storeCanvasPolicySync.test.ts`(8件)を追加:
+  優先順位変換(降順並べ替え・同数時の順序維持・delivery_receiving/adminが
+  動かないこと・常に有効な順列であること)、売場配置変換(合計が厳密に一致
+  すること・容量が増えたカテゴリの配分が増えること・dessertがsnacksへ合算
+  されること・全カテゴリ容量0でも例外を投げず均等配分すること)
+- `npx tsc --noEmit -p .`・`npx vitest run`(173件全通過)・`npm run balance:ci`
+  (バランスベンチマークはCanvasを経由しないため今回の変更で直接は変わらないが、
+  既存の合格基準を維持していることを確認)で検証済み
+
+残課題(未着手のまま):
+- delivery_receiving・adminをCanvas側から直接操作する手段が無いため、
+  この2タスクの優先順位はCanvas操作だけでは動かせない(ADR-0005
+  Consequences参照)
+- 売場配置の変換は比例配分による近似であり、上記フェーズ2の1(棚面積とタイル
+  什器レイアウトそのものの統合)はまだ未着手
 
 ## 検証方法(実施済み)
 
