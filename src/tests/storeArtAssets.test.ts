@@ -15,13 +15,13 @@ describe("store art asset mapping", () => {
     }
   });
 
-  it("maps every fixture in the default store to artwork, except frozen (no merchandise art yet, ADR-0003)", () => {
+  it("maps every fixture in the default store to artwork, except frozen/hot (no merchandise art yet, ADR-0003/ADR-0004)", () => {
     const layout = createDefaultStoreLayout();
     const snapshot = createStoreOperationsEngine(1977).getSnapshot();
     for (const fixture of layout.fixtures) {
-      if (fixture.categoryId === "frozen") {
-        // ADR-0003: frozen_case has a real fixture-bases.png cell, but no
-        // merchandise.png overlay art exists for the "frozen" category yet, so
+      if (fixture.categoryId === "frozen" || fixture.categoryId === "hot") {
+        // ADR-0003/ADR-0004: frozen_case/hot_case have real fixture-bases.png cells,
+        // but no merchandise.png overlay art exists for either category yet, so
         // resolveFixtureArtIndex intentionally falls back to undefined here (the
         // caller then draws the fallback rectangle) until ChatGPT supplies art.
         expect(resolveFixtureArtIndex(fixture, snapshot)).toBeUndefined();
@@ -56,10 +56,9 @@ describe("store art asset mapping", () => {
 
   it("leaves frozen_case/hot_case fixtures without art undrawn (fallback rectangle applies)", () => {
     // These synthetic fixtures have no categoryId, so resolveFixtureArtIndex returns
-    // undefined regardless of kind. hot_case additionally has no StoreCategoryId
-    // targeting it at all yet (see docs/store-fixture-zones.md, ADR-0003 Consequences);
-    // frozen_case now does ("frozen", ADR-0003) but still has no merchandise.png
-    // overlay art, covered by the previous test instead.
+    // undefined regardless of kind (both kinds now have a StoreCategoryId targeting
+    // them in the default layout — "frozen"/ADR-0003, "hot"/ADR-0004 — but neither has
+    // merchandise.png overlay art yet, covered by the previous test instead).
     const snapshot = createStoreOperationsEngine(1977).getSnapshot();
     const frozenCase = { id: "frozen-test", kind: "frozen_case" as const, tiles: [], customerServicePoints: [], staffServicePoints: [] };
     const hotCase = { id: "hot-test", kind: "hot_case" as const, tiles: [], customerServicePoints: [], staffServicePoints: [] };

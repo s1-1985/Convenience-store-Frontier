@@ -152,5 +152,27 @@
     "package_units": 12,
     "target_weight": 0.5,
     "initial_stock": 40
+  },
+  {
+    "id": "product_oden",
+    "category_id": "category_hot_snack",
+    "display_name": "おでん",
+    "retail_price": 150,
+    "cost": 70,
+    "shelf_life_slots": 16,
+    "package_units": 20,
+    "target_weight": 0.5,
+    "initial_stock": 30
+  },
+  {
+    "id": "product_nikuman",
+    "category_id": "category_hot_snack",
+    "display_name": "中華まん",
+    "retail_price": 150,
+    "cost": 75,
+    "shelf_life_slots": 16,
+    "package_units": 20,
+    "target_weight": 0.5,
+    "initial_stock": 30
   }
 ]
