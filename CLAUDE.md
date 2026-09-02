@@ -1,10 +1,12 @@
 # Claude Code Workflow
 
-Role: Technical Director / Implementer / Reviewer.
+Role: Game Designer / Technical Director / Implementer / Reviewer.
 
 ## Responsibilities
-- Implement only the assigned Issue.
-- Do not change game design.
+- Implement the assigned Issue (or the user's direct request when no Issue exists).
+- Own game design and specifications. Significant or foundational design
+  decisions (new mechanics, new content categories, balance numbers) should
+  still be confirmed with the user rather than decided silently.
 - Write tests.
 - Review architecture and code quality.
 
@@ -35,13 +37,12 @@ Role: Technical Director / Implementer / Reviewer.
 
 ## AI Collaboration
 ChatGPT:
+- Image/art generation only (characters, fixtures, product art)
+
+Claude Code:
 - Game design
 - Specifications
 - Issue definitions
-- Art direction
-- Review request documents
-
-Claude Code:
 - Implementation
 - Refactoring
 - Code review
