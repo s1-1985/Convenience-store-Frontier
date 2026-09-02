@@ -124,7 +124,7 @@ spawnAccumulator += arrivalRatePerMinute * safeDelta / 60;
   再現できることを確認)
 - 弁当棚などが実際に「品切れ」表示になる
 
-### 追加で見つかった要調査事項(未修正、次セッションへの申し送り)
+### 追加で見つかった要調査事項 → 追記(2026-09-02、同日中に切り分け完了)
 
 Playwrightでの確認中、客が多数(上限28人)スポーンし行列が10〜20人規模まで育つと、
 **店内Canvas側だけでなくmain.ts側の数値エンジンの時計(day/time表示)も進行が
@@ -135,8 +135,30 @@ Playwrightでの確認中、客が多数(上限28人)スポーンし行列が10�
 "register_ready"`の店員が1人以上)を満たせず会計が1件も成立しない、という状況も
 観測された。
 
-この現象がアプリ側のロジック起因(例えばA*経路探索や毎フレーム処理のコストが
-客数に応じて重くなる)なのか、それとも今回の検証に使ったヘッドレスChromium+
-ソフトウェアレンダリング+CPU共有コンテナという実行環境固有の制約なのかは、
-このセッションでは切り分けられていない。実機・実ブラウザでの再現有無を含め、
-次のセッションで改めて調査することを推奨する。
+**切り分け結果**: `StoreOperationsEngine`をPlaywright(ブラウザ描画)抜きで直接
+Node.jsから駆動し(`engine.advance()`をブラウザのRAFループと同じ形の
+`simMinutesElapsed`付きコンテキストで60秒×60fps分だけ純粋に反復呼び出し)、
+同じ「レジ優先だが行列が育つと一時的に補充へ流れる」状況を再現したところ、
+**純粋なロジックでは店員は数十秒以内に自律的にレジへ復帰し、会計が実際に成立
+することを確認した**(t=30秒時点で2件、t=55秒時点で8件成立)。
+
+```text
+t= 5.0s customers=28 queue= 0 transactions=0 staff=[register, register]
+t=10.0s customers=28 queue= 0 transactions=0 staff=[replenishment, replenishment] (行列がまだ無く補充優先へ)
+t=20.0s customers=28 queue=25 transactions=0 staff=[replenishing, replenishing]  (行列が育つ)
+t=30.0s customers=28 queue= 6 transactions=2 staff=[register_ready, register_ready] (レジへ復帰し会計開始)
+t=55.0s customers=28 queue=19 transactions=8 staff=[register_ready, register_ready]
+```
+
+つまり`updateStaff()`の自動タスク再配分ロジック(`planStoreStaffTasks`)自体には
+デッドロックは無く、「行列が無い間は手が空いた店員を補充へ回し、行列が育ったら
+手が空き次第レジへ戻る」という設計通りの挙動をしている(戻るまでに数十秒かかる
+点や、行列がある程度残っていても再び補充へ流れてしまう振動は見られるが、これは
+バランス調整の領域であり、今回は「デッドロックか否か」の切り分けのみを目的とした)。
+
+したがって、Playwrightで観測した「時計が止まって見える」「会計が永久に成立しない」
+現象は、**アプリのロジック起因ではなく、検証に使ったヘッドレスChromium(GPU無しの
+ソフトウェアレンダリング)+CPU共有コンテナという実行環境固有の性能制約により、
+requestAnimationFrame・setIntervalの発火自体が長時間止まっていたことが原因である
+可能性が高い**、と結論づけた(確度: 推論。実デバイス・実ブラウザでの再現有無は
+未確認のため、体感的な操作感が悪いと感じた場合は再検証すること)。
