@@ -10,7 +10,8 @@
       "category_snacks": 0.05,
       "category_processed_food": 0.05,
       "category_daily_goods": 0.05,
-      "category_magazines": 0.05
+      "category_magazines": 0.05,
+      "category_frozen_food": 0.02
     },
     "choice_weights": { "hours": 0.30, "assortment": 0.15, "price": 0.10, "cleanliness": 0.10, "reputation": 0.15, "distance": 0.20 }
   },
@@ -25,7 +26,8 @@
       "category_snacks": 0.05,
       "category_processed_food": 0.05,
       "category_daily_goods": 0.02,
-      "category_magazines": 0.03
+      "category_magazines": 0.03,
+      "category_frozen_food": 0.02
     },
     "choice_weights": { "hours": 0.15, "assortment": 0.30, "price": 0.10, "cleanliness": 0.10, "reputation": 0.10, "distance": 0.25 }
   },
@@ -40,7 +42,8 @@
       "category_snacks": 0.35,
       "category_processed_food": 0.05,
       "category_daily_goods": 0.05,
-      "category_magazines": 0.20
+      "category_magazines": 0.20,
+      "category_frozen_food": 0.03
     },
     "choice_weights": { "hours": 0.10, "assortment": 0.20, "price": 0.30, "cleanliness": 0.05, "reputation": 0.10, "distance": 0.25 }
   },
@@ -55,7 +58,8 @@
       "category_snacks": 0.10,
       "category_processed_food": 0.30,
       "category_daily_goods": 0.30,
-      "category_magazines": 0.05
+      "category_magazines": 0.05,
+      "category_frozen_food": 0.15
     },
     "choice_weights": { "hours": 0.10, "assortment": 0.20, "price": 0.15, "cleanliness": 0.15, "reputation": 0.20, "distance": 0.20 }
   },
@@ -70,7 +74,8 @@
       "category_snacks": 0.10,
       "category_processed_food": 0.25,
       "category_daily_goods": 0.30,
-      "category_magazines": 0.10
+      "category_magazines": 0.10,
+      "category_frozen_food": 0.12
     },
     "choice_weights": { "hours": 0.05, "assortment": 0.15, "price": 0.15, "cleanliness": 0.25, "reputation": 0.20, "distance": 0.20 }
   },
@@ -85,7 +90,8 @@
       "category_snacks": 0.15,
       "category_processed_food": 0.10,
       "category_daily_goods": 0.15,
-      "category_magazines": 0.05
+      "category_magazines": 0.05,
+      "category_frozen_food": 0.12
     },
     "choice_weights": { "hours": 0.35, "assortment": 0.10, "price": 0.25, "cleanliness": 0.05, "reputation": 0.05, "distance": 0.20 }
   }

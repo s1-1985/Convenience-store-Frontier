@@ -15,10 +15,18 @@ describe("store art asset mapping", () => {
     }
   });
 
-  it("maps every fixture in the default store to artwork", () => {
+  it("maps every fixture in the default store to artwork, except frozen (no merchandise art yet, ADR-0003)", () => {
     const layout = createDefaultStoreLayout();
     const snapshot = createStoreOperationsEngine(1977).getSnapshot();
     for (const fixture of layout.fixtures) {
+      if (fixture.categoryId === "frozen") {
+        // ADR-0003: frozen_case has a real fixture-bases.png cell, but no
+        // merchandise.png overlay art exists for the "frozen" category yet, so
+        // resolveFixtureArtIndex intentionally falls back to undefined here (the
+        // caller then draws the fallback rectangle) until ChatGPT supplies art.
+        expect(resolveFixtureArtIndex(fixture, snapshot)).toBeUndefined();
+        continue;
+      }
       expect(resolveFixtureArtIndex(fixture, snapshot)).toBeDefined();
     }
   });
@@ -47,9 +55,11 @@ describe("store art asset mapping", () => {
   });
 
   it("leaves frozen_case/hot_case fixtures without art undrawn (fallback rectangle applies)", () => {
-    // No StoreCategoryId targets these temperature-zone kinds yet (see
-    // docs/store-fixture-zones.md), so resolveFixtureArtIndex must keep returning
-    // undefined for them until a category and fixture-bases.png cells exist.
+    // These synthetic fixtures have no categoryId, so resolveFixtureArtIndex returns
+    // undefined regardless of kind. hot_case additionally has no StoreCategoryId
+    // targeting it at all yet (see docs/store-fixture-zones.md, ADR-0003 Consequences);
+    // frozen_case now does ("frozen", ADR-0003) but still has no merchandise.png
+    // overlay art, covered by the previous test instead.
     const snapshot = createStoreOperationsEngine(1977).getSnapshot();
     const frozenCase = { id: "frozen-test", kind: "frozen_case" as const, tiles: [], customerServicePoints: [], staffServicePoints: [] };
     const hotCase = { id: "hot-test", kind: "hot_case" as const, tiles: [], customerServicePoints: [], staffServicePoints: [] };

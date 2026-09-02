@@ -5,12 +5,13 @@
   "opening_hour": 7,
   "closing_hour": 23,
   "category_area": {
-    "category_ready_to_eat": 14,
-    "category_beverages": 12,
+    "category_ready_to_eat": 13,
+    "category_beverages": 11,
     "category_snacks": 11,
-    "category_processed_food": 11,
-    "category_daily_goods": 12,
-    "category_magazines": 10
+    "category_processed_food": 6,
+    "category_daily_goods": 11,
+    "category_magazines": 10,
+    "category_frozen_food": 8
   },
   "staffing_by_time_block": {
     "morning": 2,

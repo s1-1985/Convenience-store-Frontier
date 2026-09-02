@@ -122,9 +122,17 @@ snacks/instant/daily_goods/magazines)もすべてこの2種類のどちらかに
   什器が置かれるようになった際、絵が無くても最低限の見た目で描画できる。
 
 **残っている作業**(いずれもゲームデザイン側の判断が必要なため未着手):
-- 冷凍・HOT向けの新しい`StoreCategoryId`を追加するかどうか、追加する場合の商品名・価格・
-  棚容量などのバランス数値
-- デフォルト店舗レイアウトまたは売場編集UIへ`frozen_case`/`hot_case`什器を実際に配置する経路
-- ChatGPT側で生成された什器アートが届いた後の`fixture-bases.png`合成・
+- ~~冷凍向けの新しい`StoreCategoryId`を追加するかどうか、追加する場合の商品名・価格・
+  棚容量などのバランス数値~~ → 2026-09-02、`design/DECISIONS/ADR-0003-add-frozen-food-category.md`
+  で決定・実装済み。`category_frozen_food`(冷凍餃子・冷凍うどん)を追加し、
+  `StoreCategoryId`の`"frozen"`をデフォルトレイアウトの`frozen_case`什器1つへ配線した。
+  HOT向け(おでん・中華まん等)は今回対象外のまま、別ADR待ち。
+- デフォルト店舗レイアウトまたは売場編集UIへ`hot_case`什器を実際に配置する経路
+  (`frozen_case`は上記ADR-0003で解消済み)
+- ChatGPT側で冷凍食品カテゴリの陳列商品アート(`merchandise.png`への追加コマ)が
+  届いた後の`FIXTURE_INDEX`/`MERCHANDISE_INDEX`(`src/ui/storeArtAssets.ts`)への
+  `"frozen"`追記。届くまでは`frozen_case`什器はフォールバック矩形描画のまま
+  (ADR-0003 Decision 5参照)
+- HOT什器アートが届いた後の`fixture-bases.png`合成・
   `data/assets/store/fixtures-manifest.json`更新・`FIXTURE_BASE_INDEX`/`FIXTURE_BASE_COLUMNS`
   の実配線

@@ -80,6 +80,7 @@ const SIM_CATEGORY_TO_STORE_CATEGORY: Record<string, StoreCategoryId> = {
   category_processed_food: "instant",
   category_daily_goods: "daily_goods",
   category_magazines: "magazines",
+  category_frozen_food: "frozen",
 };
 
 function categoryWeightsForCohort(cohort: CohortDefinition): Record<StoreCategoryId, number> {
@@ -91,6 +92,7 @@ function categoryWeightsForCohort(cohort: CohortDefinition): Record<StoreCategor
     instant: 0,
     daily_goods: 0,
     magazines: 0,
+    frozen: 0,
   };
   for (const [simCategoryId, preference] of Object.entries(cohort.categoryPreference)) {
     const storeCategoryId = SIM_CATEGORY_TO_STORE_CATEGORY[simCategoryId];
@@ -234,6 +236,7 @@ const CATEGORY_LABELS: Record<StoreCategoryId, string> = {
   instant: "カップ麺",
   daily_goods: "日用品",
   magazines: "雑誌・書籍",
+  frozen: "冷凍食品",
 };
 
 const TASK_LABELS: Record<StoreStaffTask, string> = {
@@ -1025,6 +1028,7 @@ function renderProductPanel(panel: HTMLElement, snapshot: StoreOperationsSnapsho
 const FIXTURE_KIND_LABELS: Partial<Record<FixtureKind, string>> = {
   shelf: "常温什器",
   cold_case: "冷蔵ケース",
+  frozen_case: "冷凍ケース",
 };
 
 function renderFixtureSwapGrid(panel: HTMLElement, layout: StoreLayout): void {

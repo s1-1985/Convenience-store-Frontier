@@ -271,6 +271,7 @@ function initialCommands(strategyId: BalanceStrategyId, scenario: ScenarioBundle
             category_processed_food: 0.75,
             category_daily_goods: 0.7,
             category_magazines: 0.55,
+            category_frozen_food: 0.5,
           }),
         },
         {
@@ -293,6 +294,7 @@ function initialCommands(strategyId: BalanceStrategyId, scenario: ScenarioBundle
             category_processed_food: 1.1,
             category_daily_goods: 1.1,
             category_magazines: 0.7,
+            category_frozen_food: 1.0,
           }),
         },
         {
