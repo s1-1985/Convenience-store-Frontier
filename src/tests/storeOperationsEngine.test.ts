@@ -61,6 +61,45 @@ describe("individual store operations engine", () => {
     expect(after.kpis.revenue).toBeGreaterThan(0);
   });
 
+  it("spawns customers from simMinutesElapsed even when real deltaSeconds stays tiny", () => {
+    // Regression test: the real Simulation's clock can advance many sim-minutes per
+    // real second (sped up or fast-forwarded), so the spawn accumulator must key off
+    // sim-minutes elapsed rather than real animation-frame deltaSeconds. Before this was
+    // fixed, driving advance() with realistic small per-frame deltaSeconds (as
+    // storeGameRuntime.ts does every requestAnimationFrame tick) never accumulated
+    // enough to spawn a single customer, no matter how much sim-time had actually passed.
+    const engine = createStoreOperationsEngine(1977);
+    engine.setStaffAssignments({ register: 3, replenishment: 0, cleaning: 0 });
+
+    const frameDeltaSeconds = 1 / 60;
+    const perFrameSimMinutes = 20 / 60; // ~20 sim-minutes per real second, matching an observed compressed day
+    for (let frame = 0; frame < 120; frame += 1) {
+      engine.advance(
+        frameDeltaSeconds,
+        context({ arrivalRatePerMinute: 12, simMinutesElapsed: perFrameSimMinutes }),
+      );
+    }
+    const after = engine.getSnapshot();
+
+    expect(after.kpis.enteredCustomers).toBeGreaterThan(0);
+  });
+
+  it("does not spawn customers from real deltaSeconds alone when simMinutesElapsed is 0", () => {
+    const engine = createStoreOperationsEngine(1977);
+    engine.setStaffAssignments({ register: 3, replenishment: 0, cleaning: 0 });
+
+    const frameDeltaSeconds = 1 / 60;
+    for (let frame = 0; frame < 120; frame += 1) {
+      engine.advance(
+        frameDeltaSeconds,
+        context({ arrivalRatePerMinute: 12, simMinutesElapsed: 0 }),
+      );
+    }
+    const after = engine.getSnapshot();
+
+    expect(after.kpis.enteredCustomers).toBe(0);
+  });
+
   it("creates queue pressure before non-register priorities fall back to checkout", () => {
     const engine = createStoreOperationsEngine(2026);
     engine.setStaffAssignments({ register: 0, replenishment: 2, cleaning: 0 });
