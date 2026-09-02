@@ -231,8 +231,19 @@ export interface StoreOperationsEngine {
    * capacity-investment-gating cash stays reconciled with the real economy at every
    * day boundary. Omit it (e.g. in tests, or before the real session has loaded) to
    * keep the old self-contained approximation.
+   *
+   * `realStockoutSeverityByCategory`, when given, is the per-category real stockout
+   * severity (0..1 share of real demand lost to stockout on the shared numeric
+   * Simulation's most recently completed day, see storeGameRuntime.ts's
+   * realStockoutSeverityByCategory()) that biases this engine's own next-day delivery
+   * quantities downward for categories running short in the real economy. Omit it to
+   * leave delivery unaffected, same as a severity of 0 everywhere.
    */
-  beginDay(day: number, realCash?: number): void;
+  beginDay(
+    day: number,
+    realCash?: number,
+    realStockoutSeverityByCategory?: Partial<Record<StoreCategoryId, number>>,
+  ): void;
   /**
    * Reconciles this engine's cash against the authoritative real Simulation's cash
    * immediately, without waiting for the next beginDay() transition. Needed because
@@ -276,6 +287,13 @@ const CATEGORY_DEFAULTS: Record<StoreCategoryId, Omit<ShelfInventoryState, "cate
 // Sprite row count in data/assets/store/customers-manifest.json. Used as the fallback
 // range when no cohort-derived archetype pool is available for the current context.
 const CUSTOMER_VISUAL_ROW_COUNT = 24;
+
+// Maximum fraction by which a category's delivered backroom quantity is cut when the
+// shared real Simulation reports that category as 100% stockout-severe (see
+// deliverStock()). Kept well short of 1 so a real stockout never fully starves the
+// canvas's own delivery — just biases it toward running out sooner, same direction the
+// real economy is already trending.
+const STOCKOUT_SEVERITY_DELIVERY_PENALTY = 0.55;
 
 export function categoryPriceRange(category: StoreCategoryId): { min: number; max: number } {
   const basePrice = CATEGORY_DEFAULTS[category].price;
@@ -677,6 +695,12 @@ export function createStoreOperationsEngine(
   };
   let daysSincePolicyChange = restored?.daysSincePolicyChange ?? 0;
   let changedSinceLastDay = false;
+  // Per-category share (0..1) of real demand lost to stockout in the shared numeric
+  // Simulation's most recently completed day, set via beginDay()'s
+  // realStockoutSeverityByCategory argument. Not persisted across serialize()/restore()
+  // — it is a derived signal recomputed from the live real Simulation on the next
+  // beginDay() call, not authoritative state of its own.
+  let stockoutSeverityByCategory: Partial<Record<StoreCategoryId, number>> = {};
   // Running total spent on shelf-capacity investments (investInCategoryCapacity),
   // which the shared real Simulation has no matching command for and therefore never
   // reflects. Every time this engine's cash is reconciled against that real cash (via
@@ -1141,10 +1165,20 @@ export function createStoreOperationsEngine(
         : 1.08;
     for (const categoryId of categories) {
       const inventory = inventories[categoryId];
-      const targetBackroom = Math.round(inventory.shelfCapacity * 2.1 * orderingMultiplier);
+      // Categories the shared real Simulation reports as stockout-heavy get less
+      // delivered here too, so this engine's own shelf model trends toward "empty" for
+      // the same categories that are actually short in the real economy instead of
+      // staying fully stocked regardless (docs/game-design.md §7: on-screen state and
+      // internal numbers must agree). A severity of 0 (no signal yet, or the category
+      // is fully stocked in reality) leaves delivery unchanged.
+      const severity = clamp(stockoutSeverityByCategory[categoryId] ?? 0, 0, 1);
+      const realityMultiplier = 1 - severity * STOCKOUT_SEVERITY_DELIVERY_PENALTY;
+      const targetBackroom = Math.round(
+        inventory.shelfCapacity * 2.1 * orderingMultiplier * realityMultiplier,
+      );
       if (inventory.backroomUnits < targetBackroom) {
         inventory.backroomUnits += Math.round(
-          inventory.shelfCapacity * orderingMultiplier * quantityMultiplier,
+          inventory.shelfCapacity * orderingMultiplier * quantityMultiplier * realityMultiplier,
         );
       }
     }
@@ -1196,8 +1230,15 @@ export function createStoreOperationsEngine(
       kpis.maximumQueueLength = Math.max(kpis.maximumQueueLength, queueCustomerIds.length);
     },
 
-    beginDay(nextDay: number, realCash?: number): void {
+    beginDay(
+      nextDay: number,
+      realCash?: number,
+      realStockoutSeverityByCategory?: Partial<Record<StoreCategoryId, number>>,
+    ): void {
       if (nextDay === day) return;
+      if (realStockoutSeverityByCategory) {
+        stockoutSeverityByCategory = realStockoutSeverityByCategory;
+      }
       if (kpis.enteredCustomers > 0 || kpis.revenue > 0) {
         const entered = Math.max(1, kpis.enteredCustomers);
         const conversion = clamp(kpis.transactions / entered, 0, 1);

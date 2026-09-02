@@ -102,6 +102,49 @@ function categoryWeightsForCohort(cohort: CohortDefinition): Record<StoreCategor
   return weights;
 }
 
+/**
+ * Aggregates, per StoreCategoryId, the share (0..1) of real demand lost to stockout on
+ * the shared numeric Simulation's most recently completed day. Fed into
+ * StoreOperationsEngine.beginDay() so the canvas's own next-day shelf delivery trends
+ * toward "empty" for the same categories actually running short in the real economy
+ * (see docs/visual-numeric-engine-integration.md, "在庫欠品表示の同期").
+ *
+ * "dessert" has no distinct sim-category counterpart — its demand is carved out of
+ * "category_snacks" the same way categoryWeightsForCohort() above does — so it inherits
+ * the "snacks" severity rather than reading as always fully stocked.
+ *
+ * Returns {} before the shared session has loaded or before any day has completed
+ * (day 1), in which case beginDay() leaves delivery unaffected.
+ */
+function realStockoutSeverityByCategory(): Partial<Record<StoreCategoryId, number>> {
+  const session = gameSession();
+  if (!session) return {};
+  const latest = session.session.simulation.getAllDailyReports().at(-1);
+  if (!latest) return {};
+
+  const simCategoryByProductId = new Map(
+    session.scenario.products.map((product) => [product.id, product.categoryId]),
+  );
+  const stockoutBySimCategory: Record<string, number> = {};
+  for (const [productId, units] of Object.entries(latest.stockoutUnitsByProduct)) {
+    const simCategoryId = simCategoryByProductId.get(productId);
+    if (!simCategoryId) continue;
+    stockoutBySimCategory[simCategoryId] = (stockoutBySimCategory[simCategoryId] ?? 0) + units;
+  }
+
+  const severity: Partial<Record<StoreCategoryId, number>> = {};
+  for (const [simCategoryId, stockoutUnits] of Object.entries(stockoutBySimCategory)) {
+    const storeCategoryId = SIM_CATEGORY_TO_STORE_CATEGORY[simCategoryId];
+    if (!storeCategoryId) continue;
+    const soldUnits = latest.salesUnitsByCategory[simCategoryId] ?? 0;
+    const desiredUnits = stockoutUnits + soldUnits;
+    if (desiredUnits <= 0) continue;
+    severity[storeCategoryId] = Math.min(1, Math.max(0, stockoutUnits / desiredUnits));
+  }
+  if (severity.snacks !== undefined) severity.dessert = severity.snacks;
+  return severity;
+}
+
 function timeBlockForHour(scenario: ScenarioBundle, hour: number): TimeBlockId {
   const block = scenario.timeBlocks.find((candidate) => hour >= candidate.startHour && hour < candidate.endHour);
   return (block?.id ?? "evening") as TimeBlockId;
@@ -1470,7 +1513,11 @@ function start(): void {
       }
     }
     if (day !== knownDay) {
-      engine.beginDay(day, gameSession()?.session.simulation.getSnapshot().cash);
+      engine.beginDay(
+        day,
+        gameSession()?.session.simulation.getSnapshot().cash,
+        realStockoutSeverityByCategory(),
+      );
       knownDay = day;
     }
     const focus = engine.getSnapshot().merchandisingFocus;
