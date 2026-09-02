@@ -77,13 +77,13 @@
     "initial_stock": 70
   },
   {
-    "id": "product_frozen_gyoza",
+    "id": "product_retort_curry",
     "category_id": "category_processed_food",
-    "display_name": "冷凍餃子",
-    "retail_price": 380,
-    "cost": 220,
-    "shelf_life_slots": 2880,
-    "package_units": 12,
+    "display_name": "レトルトカレー",
+    "retail_price": 220,
+    "cost": 130,
+    "shelf_life_slots": 5760,
+    "package_units": 20,
     "target_weight": 0.5,
     "initial_stock": 40
   },
@@ -130,5 +130,27 @@
     "package_units": 10,
     "target_weight": 0.4,
     "initial_stock": 20
+  },
+  {
+    "id": "product_frozen_gyoza",
+    "category_id": "category_frozen_food",
+    "display_name": "冷凍餃子",
+    "retail_price": 380,
+    "cost": 220,
+    "shelf_life_slots": 2880,
+    "package_units": 12,
+    "target_weight": 0.5,
+    "initial_stock": 40
+  },
+  {
+    "id": "product_frozen_udon",
+    "category_id": "category_frozen_food",
+    "display_name": "冷凍うどん",
+    "retail_price": 260,
+    "cost": 150,
+    "shelf_life_slots": 2880,
+    "package_units": 12,
+    "target_weight": 0.5,
+    "initial_stock": 40
   }
 ]

@@ -4,5 +4,6 @@
   { "id": "category_snacks", "display_name": "菓子" },
   { "id": "category_processed_food", "display_name": "加工食品" },
   { "id": "category_daily_goods", "display_name": "日用品" },
-  { "id": "category_magazines", "display_name": "雑誌・新聞" }
+  { "id": "category_magazines", "display_name": "雑誌・新聞" },
+  { "id": "category_frozen_food", "display_name": "冷凍食品" }
 ]

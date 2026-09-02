@@ -13,8 +13,8 @@ describe("loadScenario", () => {
 
     expect(bundle.scenario.totalDays).toBe(30);
     expect(bundle.cohorts).toHaveLength(6);
-    expect(bundle.categories).toHaveLength(6);
-    expect(bundle.products).toHaveLength(12);
+    expect(bundle.categories).toHaveLength(7);
+    expect(bundle.products).toHaveLength(14);
     expect(bundle.playerStore.isPlayerControlled).toBe(true);
     expect(bundle.competitorStores).toHaveLength(1);
     expect(bundle.timeBlocks).toHaveLength(4);

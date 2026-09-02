@@ -1,7 +1,7 @@
 # HANDOFF — 引き継ぎメモ
 
-最終更新: 2026-09-02(セッションID `session_01KGvF2q3A9ckA45UX6stZaJ`)
-対象ブランチ: `claude/review-md-files-ny37xl`(mainに追従、都度リセットして使う運用)
+最終更新: 2026-09-02(セッションID `session_01MfcvrmAdbWq5fbzqJVR9hd`)
+対象ブランチ: `claude/review-md-files-ktplye`(mainに追従、都度リセットして使う運用)
 
 このファイルは、直近セッションで決まった仕様・実施した作業・積み残しの課題を、
 次のセッション(別のClaude Codeインスタンス)が読むだけで状況を把握できるように
@@ -122,6 +122,56 @@ ChatGPT側の設計判断を仰ぐこと(詳細は2.6参照)。
   次のセッションには持ち越されない(下記5参照)。
 
 ---
+
+## 0-B. 続く別セッション(2026-09-02、新カテゴリ追加「冷凍食品」の実装)
+
+「ゲームデザインと実装を進めて」という指示を受け、上記2.2(frozen_case/hot_caseが
+プレイ上で見えない問題)のうち保留になっていた「新カテゴリのバランス数値決定」を、
+ユーザーへ次の作業候補(技術統合の続き/アセット統合の続き/歩行アニメーション/
+新カテゴリ追加)を確認した上で着手した。ユーザーが「新カテゴリ追加(冷凍食品等)」を
+選択。
+
+- **`design/DECISIONS/ADR-0003-add-frozen-food-category.md`を新設**し、以下を決定・
+  実装した(詳細・根拠はADR本文を参照):
+  - 数値エンジン側に`category_frozen_food`(冷凍食品)を新設。既存の
+    `product_frozen_gyoza`(冷凍餃子、これまで専用カテゴリが無く`category_processed_food`
+    へ仮分類されていたもの)をこちらへ付け替え、新規`product_frozen_udon`(冷凍うどん)を
+    追加。`category_processed_food`には代わりに`product_retort_curry`(レトルトカレー)を
+    追加し商品数2を維持(商品総数12→14、カテゴリ数6→7)。
+  - `data/cohorts/customer_cohorts.json`の6コホート全てへ`category_frozen_food`の
+    嗜好を追加(家庭客・高齢者・単身者/工場勤務者を厚めに)。
+  - `data/stores/player_store.json`・`competitor_store.json`の`category_area`を
+    再配分し、`economy.json`の`total_shelf_area_points`(70)を維持したまま
+    `category_frozen_food`へ面積を割り当て(主に`category_processed_food`から捻出)。
+  - `src/balance/benchmark.ts`の`lunch_focus`/`regional_generalist`戦略の
+    `set_category_area`重み付けにも`category_frozen_food`を追記(未記載だと
+    デフォルト重み1が入り、他カテゴリの意図した重み付けと整合しなくなるため)。
+  - Canvas側(`src/game/storeOperationsEngine.ts`)の`StoreCategoryId`に`"frozen"`を
+    追加し、`CATEGORY_DEFAULTS`・`createDefaultStoreLayout`(空きグリッド領域
+    `x6-10,y9-10`に`frozen_case`什器を新設、`docs/store-fixture-zones.md`が言う
+    「実際に配置する経路が無い」状態を解消)を更新。`src/ui/storeGameRuntime.ts`の
+    `SIM_CATEGORY_TO_STORE_CATEGORY`・`CATEGORY_LABELS`・`categoryWeightsForCohort`・
+    `FIXTURE_KIND_LABELS`、`defaultCategoryWeightsForHour`(同ファイル内)も配線。
+  - 陳列商品アート(`merchandise.png`)は`"frozen"`をまだ追加していない
+    (ChatGPT側のアート未着手のため)。`resolveFixtureArtIndex`はこの什器に対して
+    意図的に`undefined`を返し、既存の`drawFallbackFixture`(冷凍用の氷色フォールバック、
+    PR #55で準備済み)へ自然にフォールバックする実装のため、表示は壊れない。
+  - HOTケース(おでん・中華まん)は今回は対象外のまま(ADR-0003内で理由を明記)。
+    `hot_case`のFixtureKind・アートは引き続き未使用。
+- 既存テスト3件(`loadScenario.test.ts`のカテゴリ/商品数、`storeArtAssets.test.ts`の
+  「全什器にアートがある」前提、`storeOperationsEngine.test.ts`の陳列替えテストが
+  frozen単体什器(同種什器が1つしか無く陳列替え不可)を引いた場合)を、上記の意図した
+  仕様変更として更新。`npx tsc --noEmit -p .`・`npx vitest run`(165件全通過)・
+  `npm run balance:ci`(4戦略とも実用範囲、単一戦略の支配なし)で確認済み。
+- Playwrightでの実機確認を試みたが、この実行環境では**ADR-0003適用前の`main`
+  ブランチ(変更なし)でも`#app`の`hidden`属性が外れず「店舗データを読み込んでいる…」
+  のまま60秒待っても進行しない**ことを`git stash`によるA/B比較で確認した(コンソール・
+  ネットワークエラーは一切出ない)。`curl`でのdata/JSON直接取得は全ファイル正常に
+  返る。この停止は今回の変更が原因ではなく、この実行環境固有の制約(ヘッドレス
+  Chromium+CPU共有コンテナ、HANDOFF.md 0.2で既に記録されている同種の問題)である
+  可能性が高い。今回は`npx tsc --noEmit -p .`・`npx vitest run`(165件)・
+  `npm run balance:ci`(4戦略とも実用範囲)による検証に留め、実ブラウザでの
+  Playwright確認は次のセッション(または実デバイス)で改めて行うこと。
 
 ## 1. このセッションでやったこと(時系列サマリ)
 
@@ -274,18 +324,15 @@ manifest/atlas更新→typecheck・vitest・Playwrightで確認→コミット)�
 シンプルなので難しくない: PIL+scipy.ndimageでalphaチャンネルの連結成分を
 ラベリングし、bboxで切り出すだけ)。
 
-### 2.2 frozen_case/hot_caseがまだプレイ上で見えない
+### 2.2 frozen_case/hot_caseがまだプレイ上で見えない → frozen_caseは解消済み(2026-09-02)
 
-`FixtureKind`とアセットはPR #55/#57で用意済みだが、これらの種類の什器を
-実際に配置する経路が無い:
-- 対応する`StoreCategoryId`が存在しない(冷凍食品・おでん・中華まん等の
-  新カテゴリが必要)
-- デフォルトレイアウト(`createDefaultStoreLayout`)・売場編集UIも、この
-  2種類の什器を一切生成しない
+~~`FixtureKind`とアセットはPR #55/#57で用意済みだが、これらの種類の什器を
+実際に配置する経路が無い~~ → `frozen_case`は`design/DECISIONS/ADR-0003-add-frozen-food-category.md`
+(上記0-B参照)で`category_frozen_food`を新設し、デフォルトレイアウトへ配置済み。
 
-新カテゴリの追加はバランス数値(価格・棚容量・カテゴリ嗜好等)を伴う
-ゲームデザイン判断であり、CLAUDE.mdの方針上Claude Codeが独断で決めるべき
-ではない。**ユーザーまたはChatGPT側でカテゴリ定義を決めてもらう必要がある**。
+残っているのは`hot_case`(おでん・中華まん等)のみ。ADR-0003は意図的にHOTケースを
+対象外とした(理由はADR本文参照)。追加する場合も同様にバランス数値の決定を伴う
+ゲームデザイン判断であり、独断で決めるべきではない。
 
 ### 2.3 歩行アニメーション(新機能、未着手)
 
@@ -361,7 +408,7 @@ ChatGPT製キャラクターアセットには4方向×3コマの歩行差分が
 |---|---|---|
 | 時計 | `SimClock`(15分/スロット、`main.ts`の`setInterval`で進行) | `requestAnimationFrame`。**PR #56以降は共有セッション経由で数値エンジンのday/slotを読む**(`storeGameRuntime.ts`の`simulatedClock()`) |
 | 現金 | `Simulation`が正(`applyPolicy`/日報で変動) | **PR #56以降は数値エンジンのcashに同期**(`beginDay`/`setCash`)。ただし売場拡張(`investInCategoryCapacity`)は見た目エンジン独自の支出で、`unsyncedCapacityInvestment`により二重計上を防止 |
-| 商品カテゴリ | 6種(`category_ready_to_eat`等、商品単位の在庫バッチを持つ) | 7種(`StoreCategoryId`、カテゴリ単位の集約在庫のみ)。`SIM_CATEGORY_TO_STORE_CATEGORY`で近似変換 |
+| 商品カテゴリ | 7種(`category_ready_to_eat`等、商品単位の在庫バッチを持つ。ADR-0003で`category_frozen_food`を追加) | 8種(`StoreCategoryId`、カテゴリ単位の集約在庫のみ。同ADRで`"frozen"`を追加)。`SIM_CATEGORY_TO_STORE_CATEGORY`で近似変換 |
 | 棚面積 | `categoryArea`(カテゴリごとの点数、合計固定) | タイル什器レイアウト(`StoreLayout.fixtures`)。**未統合**(2.5参照) |
 | 客の来店 | コホート別の潜在需要→店舗選択→購買 | 個別エージェントがCanvas上を歩く。**来店数はPR #56で実数値に同期済み**だが、誰が何を買ったかの1対1対応は無い |
 | 共有ポイント | `src/ui/gameSession.ts`が両者から呼ばれる唯一の`Simulation`インスタンス | 同上 |
@@ -371,7 +418,7 @@ ChatGPT製キャラクターアセットには4方向×3コマの歩行差分が
 ## 4. 参照ドキュメント索引
 
 - `design/PRINCIPLES.md` — ゲームデザインの憲法(絶対に守ること・中核的な設計原則・本作固有の面白さ。CLAUDE.md指定の必読)
-- `design/DECISIONS/ADR-*.md` — 設計判断の記録(ADR-0001: AI協業の役割分担変更、ADR-0002: 文化カード等の復元)
+- `design/DECISIONS/ADR-*.md` — 設計判断の記録(ADR-0001: AI協業の役割分担変更、ADR-0002: 文化カード等の復元、ADR-0003: 冷凍食品カテゴリ追加)
 - `docs/game-design.md` / `docs/vertical-slice.md` / `docs/architecture.md` — 正本(CLAUDE.md指定の必読)
 - `docs/free-play-roadmap.md` — フリープレイ実装ロードマップ(進捗を随時更新すること)
 - `docs/store-fixture-zones.md` — 什器の温度帯区分・年代別ビジュアル方針、ザ・コンビニ調査結果
