@@ -7,9 +7,9 @@
 次のセッション(別のClaude Codeインスタンス)が読むだけで状況を把握できるように
 まとめたものである。詳細は各節末尾の参照ドキュメントを見ること。
 
-CLAUDE.mdの「Read in order」に従い、README.md → docs/game-design.md →
-docs/vertical-slice.md → docs/architecture.md を読んだ後、このファイルで
-直近の変更点を把握してから作業を始めること。
+CLAUDE.mdの「Read in order」に従い、README.md → design/PRINCIPLES.md →
+docs/game-design.md → docs/vertical-slice.md → docs/architecture.md を
+読んだ後、このファイルで直近の変更点を把握してから作業を始めること。
 
 ---
 
@@ -370,6 +370,8 @@ ChatGPT製キャラクターアセットには4方向×3コマの歩行差分が
 
 ## 4. 参照ドキュメント索引
 
+- `design/PRINCIPLES.md` — ゲームデザインの憲法(絶対に守ること・中核的な設計原則・本作固有の面白さ。CLAUDE.md指定の必読)
+- `design/DECISIONS/ADR-*.md` — 設計判断の記録(ADR-0001: AI協業の役割分担変更、ADR-0002: 文化カード等の復元)
 - `docs/game-design.md` / `docs/vertical-slice.md` / `docs/architecture.md` — 正本(CLAUDE.md指定の必読)
 - `docs/free-play-roadmap.md` — フリープレイ実装ロードマップ(進捗を随時更新すること)
 - `docs/store-fixture-zones.md` — 什器の温度帯区分・年代別ビジュアル方針、ザ・コンビニ調査結果
