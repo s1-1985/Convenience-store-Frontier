@@ -55,6 +55,7 @@ npm run preview
 
 ## ドキュメント
 
+- [ゲームデザインの憲法](design/PRINCIPLES.md)
 - [ゲームデザイン](docs/game-design.md)
 - [30日版垂直スライス仕様](docs/vertical-slice.md)
 - [実装バックログ](docs/backlog.md)

@@ -12,11 +12,12 @@ Role: Game Designer / Technical Director / Implementer / Reviewer.
 
 ## Read in order
 1. README.md
-2. docs/game-design.md
-3. docs/vertical-slice.md
-4. docs/architecture.md
-5. Target GitHub Issue
-6. reviews/requests/issue-XXX.md
+2. design/PRINCIPLES.md
+3. docs/game-design.md
+4. docs/vertical-slice.md
+5. docs/architecture.md
+6. Target GitHub Issue
+7. reviews/requests/issue-XXX.md
 
 ## Workflow
 1. Read the Issue.
@@ -25,6 +26,9 @@ Role: Game Designer / Technical Director / Implementer / Reviewer.
 4. If asked to review, do not modify code.
 5. Write results to reviews/results/issue-XXX.md.
 6. If specification is unclear, record questions instead of guessing.
+7. When a design decision changes established direction (not just fills in an
+   unspecified detail), record it as design/DECISIONS/ADR-XXXX.md (see
+   design/DECISIONS/README.md for the template).
 
 ## Review template
 - Status
