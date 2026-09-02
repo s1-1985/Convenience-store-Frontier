@@ -3,6 +3,7 @@ import {
   resolveAgentFacing,
   resolveFixtureArtIndex,
   resolveFixtureStockState,
+  resolveWalkFrame,
   STORE_ART_ATLAS_SPEC,
 } from "../ui/storeArtAssets.js";
 import { createDefaultStoreLayout, createStoreOperationsEngine } from "../game/storeOperationsEngine.js";
@@ -64,6 +65,26 @@ describe("store art asset mapping", () => {
     const hotCase = { id: "hot-test", kind: "hot_case" as const, tiles: [], customerServicePoints: [], staffServicePoints: [] };
     expect(resolveFixtureArtIndex(frozenCase, snapshot)).toBeUndefined();
     expect(resolveFixtureArtIndex(hotCase, snapshot)).toBeUndefined();
+  });
+
+  it("keeps every walk frame at 0 when only one frame per direction exists (today's atlases)", () => {
+    for (const phase of [0, 0.1, 0.39, 0.4, 5, 1000]) {
+      expect(resolveWalkFrame(phase, 1)).toBe(0);
+    }
+    expect(resolveWalkFrame(undefined, 1)).toBe(0);
+  });
+
+  it("cycles through the available frames as walkCyclePhase advances", () => {
+    // WALK_FRAME_STEP_TILES is 0.4 tiles per frame advance (see storeArtAssets.ts).
+    expect(resolveWalkFrame(0, 3)).toBe(0);
+    expect(resolveWalkFrame(0.39, 3)).toBe(0);
+    expect(resolveWalkFrame(0.4, 3)).toBe(1);
+    expect(resolveWalkFrame(0.8, 3)).toBe(2);
+    expect(resolveWalkFrame(1.3, 3)).toBe(0);
+  });
+
+  it("treats a missing walkCyclePhase (a save from before this field existed) as 0", () => {
+    expect(resolveWalkFrame(undefined, 3)).toBe(0);
   });
 
   it("selects direction from the next path tile", () => {
