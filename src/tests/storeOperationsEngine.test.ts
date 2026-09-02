@@ -380,12 +380,91 @@ describe("individual store operations engine", () => {
     const engine = restoreStoreOperationsEngine(source);
 
     let lastResult: { ok: boolean; message: string } | undefined;
-    for (let attempt = 0; attempt < maxShelfTier() + 1; attempt += 1) {
+    for (let attempt = 0; attempt < maxShelfTier("drinks") + 1; attempt += 1) {
       lastResult = engine.investInCategoryCapacity("drinks");
     }
 
-    expect(engine.getSnapshot().categoryTiers.drinks).toBe(maxShelfTier());
+    expect(engine.getSnapshot().categoryTiers.drinks).toBe(maxShelfTier("drinks"));
     expect(lastResult?.ok).toBe(false);
+  });
+
+  it("ADR-0006: reaching the 4th tier physically grows the fixture and re-routes an agent already walking there", () => {
+    const source = createStoreOperationsEngine(1977).serialize();
+    source.cash = 10_000_000;
+    const engine = restoreStoreOperationsEngine(source);
+    expect(maxShelfTier("drinks")).toBe(4);
+
+    const tilesBefore = engine.getLayout().fixtures.find((fixture) => fixture.id === "drinks")!.tiles.length;
+
+    let walker: ReturnType<StoreOperationsEngine["getSnapshot"]>["customers"][number] | undefined;
+    let elapsed = 0;
+    while (!walker && elapsed < 120) {
+      engine.advance(0.25, context({ arrivalRatePerMinute: 40, categoryWeights: { ...defaultCategoryWeightsForHour(12), drinks: 50 } }));
+      elapsed += 0.25;
+      walker = engine.getSnapshot().customers.find(
+        (customer) => customer.state === "walking_to_shelf" && customer.targetCategory === "drinks",
+      );
+    }
+    expect(walker).toBeDefined();
+    const staleGoal = walker!.path.at(-1);
+
+    for (let tier = 0; tier < 3; tier += 1) expect(engine.investInCategoryCapacity("drinks").ok).toBe(true);
+    const result = engine.investInCategoryCapacity("drinks");
+
+    expect(result.ok).toBe(true);
+    const drinksFixture = engine.getLayout().fixtures.find((fixture) => fixture.id === "drinks")!;
+    expect(drinksFixture.tiles.length).toBeGreaterThan(tilesBefore);
+
+    const rerouted = engine.getSnapshot().customers.find((customer) => customer.id === walker!.id);
+    const newGoal = rerouted?.path.at(-1);
+    // The stale goal (y3) no longer exists as a customerServicePoint once the fixture
+    // has grown into it — the re-routed customer must be heading somewhere else.
+    expect(newGoal === undefined || newGoal.y !== staleGoal?.y || newGoal.x !== staleGoal?.x).toBe(true);
+  });
+
+  it("ADR-0006: fully expanding every category leaves no overlapping tiles and every service point reachable from the entrance", () => {
+    const source = createStoreOperationsEngine(1977).serialize();
+    source.cash = 100_000_000;
+    const engine = restoreStoreOperationsEngine(source);
+
+    const categories = Object.keys(engine.getSnapshot().inventories) as StoreCategoryId[];
+    for (const category of categories) {
+      const max = maxShelfTier(category);
+      for (let tier = 0; tier < max; tier += 1) {
+        expect(engine.investInCategoryCapacity(category).ok).toBe(true);
+      }
+    }
+
+    const layout = engine.getLayout();
+
+    const tileOwner = new Map<string, string>();
+    for (const fixture of layout.fixtures) {
+      for (const tile of fixture.tiles) {
+        const key = `${tile.x},${tile.y}`;
+        const owner = tileOwner.get(key);
+        expect(owner, `tile ${key} claimed by both ${owner} and ${fixture.id}`).toBeUndefined();
+        tileOwner.set(key, fixture.id);
+      }
+    }
+
+    for (const fixture of layout.fixtures) {
+      for (const servicePoint of [...fixture.customerServicePoints, ...fixture.staffServicePoints]) {
+        const key = `${servicePoint.x},${servicePoint.y}`;
+        expect(tileOwner.has(key), `service point ${key} for ${fixture.id} is blocked by a fixture`).toBe(false);
+      }
+    }
+
+    // findStorePath also returns [] when the start tile is already one of the goals —
+    // true only for the entrance fixture itself (its own customerServicePoints include
+    // entranceTile), so it's excluded here; every other fixture's empty path
+    // unambiguously means "unreachable".
+    for (const fixture of layout.fixtures) {
+      if (fixture.customerServicePoints.length === 0 || fixture.id === "entrance") continue;
+      const path = findStorePath(layout, layout.entranceTile, fixture.customerServicePoints);
+      expect(path.length, `no path from entrance to ${fixture.id}`).toBeGreaterThan(0);
+    }
+    const path = findStorePath(layout, layout.entranceTile, [layout.backroomTile]);
+    expect(path.length).toBeGreaterThan(0);
   });
 
   it("round-trips cash and category tiers through serialize/restore", () => {

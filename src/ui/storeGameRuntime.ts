@@ -1065,11 +1065,11 @@ function renderInvestmentGrid(panel: HTMLElement, snapshot: StoreOperationsSnaps
   const grid = panel.querySelector<HTMLElement>(".product-investment-grid");
   if (!grid) return;
   grid.replaceChildren();
-  const maxTier = maxShelfTier();
   for (const categoryId of Object.keys(CATEGORY_LABELS) as StoreCategoryId[]) {
     const inventory = snapshot.inventories[categoryId];
     const tier = snapshot.categoryTiers[categoryId] ?? 0;
-    const investment = nextCapacityInvestment(tier);
+    const maxTier = maxShelfTier(categoryId);
+    const investment = nextCapacityInvestment(categoryId, tier);
     const row = document.createElement("div");
     row.className = "product-investment-row";
     const tierLabel = `拡張 ${tier}/${maxTier}`;
