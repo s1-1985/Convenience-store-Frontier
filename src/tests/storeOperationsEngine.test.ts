@@ -627,4 +627,30 @@ describe("individual store operations engine", () => {
     engine.setCash(before);
     expect(engine.getSnapshot().cash).toBe(before - spent);
   });
+
+  it("beginDay's real stockout severity reduces next-day delivered backroom stock for that category only", () => {
+    const baseline = createStoreOperationsEngine(1977);
+    baseline.beginDay(2);
+    const baselineInventories = baseline.getSnapshot().inventories;
+
+    const severe = createStoreOperationsEngine(1977);
+    severe.beginDay(2, undefined, { drinks: 1 });
+    const severeInventories = severe.getSnapshot().inventories;
+
+    expect(severeInventories.drinks.backroomUnits).toBeLessThan(
+      baselineInventories.drinks.backroomUnits,
+    );
+    // A severity signal for one category must not bleed into another category's delivery.
+    expect(severeInventories.snacks.backroomUnits).toBe(baselineInventories.snacks.backroomUnits);
+  });
+
+  it("omitting beginDay's real stockout severity behaves the same as passing all-zero severities", () => {
+    const omitted = createStoreOperationsEngine(1977);
+    omitted.beginDay(2);
+
+    const explicitZero = createStoreOperationsEngine(1977);
+    explicitZero.beginDay(2, undefined, { drinks: 0, snacks: 0, ready_meal: 0 });
+
+    expect(omitted.getSnapshot().inventories).toEqual(explicitZero.getSnapshot().inventories);
+  });
 });

@@ -53,9 +53,43 @@ main.tsの「方針を反映」ボタンを押すまで数値エンジンに届�
 ## フェーズ2として明確に後回しにしているもの(既存の合意事項)
 
 1. 棚面積(`categoryArea`点数配分)とタイル什器レイアウトの統合
-2. 商品単位とカテゴリ単位の完全統合(在庫欠品表示を含む、上記参照)
+2. 商品単位とカテゴリ単位の完全統合(在庫欠品表示を含む、上記参照) — 下記
+   「フェーズ2a」参照。一部着手済み
 3. スロット単位で来店客1人1人を数値エンジンと厳密に対応させる演出
 4. `set_category_area`/`set_task_priorities`をCanvas側から即時反映すること
+
+## フェーズ2a: 実欠品シビアリティによる翌日納品量のバイアス(2026-09-02、着手)
+
+上記2「在庫欠品表示の同期」のうち、既存の「棚在庫が減る→空になる→警告が出る」
+という視覚フィードバックループ自体は壊さずに進められる部分として、翌日の
+納品量算出(`deliverStock()`)だけを本物の`Simulation`の実欠品状況に連動させた。
+
+- `storeGameRuntime.ts`に`realStockoutSeverityByCategory()`(非公開関数)を追加。
+  共有セッションの直近完了日`DailyReport`から、`stockoutUnitsByProduct`
+  (商品単位)を`scenario.products`の`categoryId`で6種の商品カテゴリへ集計し、
+  `salesUnitsByCategory`(同じ商品カテゴリ単位で既に集計済み)との比から
+  「実需要のうち欠品で失われた割合」(0〜1)を算出。`SIM_CATEGORY_TO_STORE_CATEGORY`
+  で7種の店舗カテゴリへ変換する(`dessert`は`snacks`と同じ値を継承。
+  `categoryWeightsForCohort()`と同じ理由で、`dessert`に対応する商品カテゴリが
+  存在しないため)。
+- `StoreOperationsEngine.beginDay()`の第3引数
+  (`realStockoutSeverityByCategory?: Partial<Record<StoreCategoryId, number>>`)
+  としてこの値を渡す。`deliverStock()`はカテゴリごとにこの値でシビアリティ
+  倍率(最大55%減、`STOCKOUT_SEVERITY_DELIVERY_PENALTY`)を掛けて納品量を
+  減らす。シビアリティ0(未着荷・データ無し・省略時)では従来と完全に同じ挙動。
+- 商品単位の在庫バッチや`shelfUnits`/`shelfCapacity`自体は引き続きCanvas独自
+  シミュレーションのまま(粒度差の完全な吸収はまだ)。あくまで「本物の経済が
+  欠品気味のカテゴリは、見た目のシェルフも欠品しやすくなる」という一方向の
+  バイアスを翌日納品量に掛けるだけの、リスクを絞った第一歩。
+- 回帰テスト: `src/tests/storeOperationsEngine.test.ts`に2本追加
+  (実シビアリティ有りで対象カテゴリの納品量が減ること、他カテゴリへ波及しない
+  こと/省略時は全カテゴリ0シビアリティと同じ結果になること)。
+- Playwrightで日送りを複数回実行し、コンソール・ページエラーが出ないことを確認済み。
+
+残課題(未着手のまま):
+- 商品単位バッチとCanvasのカテゴリ単位在庫の完全統合(在庫数そのものの同期)
+- `resolveFixtureStockState`などの表示ロジックを本物の商品単位欠品から直接
+  算出する経路
 
 ## 検証方法(実施済み)
 
