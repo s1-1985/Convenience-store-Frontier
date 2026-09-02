@@ -6,13 +6,13 @@ export type StoreCategoryId =
   | "instant"
   | "daily_goods"
   | "magazines"
-  | "frozen";
+  | "frozen"
+  | "hot";
 
 export type StoreStaffTask = "register" | "replenishment" | "cleaning";
 // frozen_case/hot_case are temperature-zone fixture kinds (see docs/store-fixture-zones.md).
-// "frozen" (ADR-0003) is the first StoreCategoryId to target frozen_case, placed in
-// createDefaultStoreLayout below. hot_case still has no StoreCategoryId targeting it —
-// that remains a separate follow-up decision (see ADR-0003 Consequences).
+// "frozen" (ADR-0003) and "hot" (ADR-0004) both target their respective fixture kinds,
+// placed in createDefaultStoreLayout below.
 export type FixtureKind =
   | "shelf"
   | "cold_case"
@@ -274,6 +274,7 @@ const CATEGORY_IDS: StoreCategoryId[] = [
   "daily_goods",
   "magazines",
   "frozen",
+  "hot",
 ];
 
 const CATEGORY_DEFAULTS: Record<StoreCategoryId, Omit<ShelfInventoryState, "categoryId">> = {
@@ -287,6 +288,9 @@ const CATEGORY_DEFAULTS: Record<StoreCategoryId, Omit<ShelfInventoryState, "cate
   // ADR-0003: 冷凍食品(冷凍餃子・冷凍うどん)。加工食品(instant)に近い在庫規模だが、
   // 単価は冷凍食品のほうやや高いため価格帯を上げてある。
   frozen: { shelfUnits: 10, shelfCapacity: 14, backroomUnits: 30, price: 300 },
+  // ADR-0004: ホットスナック(おでん・中華まん)。小型什器・低単価・高回転を想定し、
+  // 在庫規模はカテゴリ中最小にしてある。
+  hot: { shelfUnits: 8, shelfCapacity: 12, backroomUnits: 20, price: 150 },
 };
 
 // Sprite row count in data/assets/store/customers-manifest.json. Used as the fallback
@@ -425,6 +429,14 @@ export function createDefaultStoreLayout(): StoreLayout {
         tiles: rectangleTiles(6, 9, 5, 2),
         customerServicePoints: [point(6, 11), point(7, 11), point(8, 11), point(9, 11), point(10, 11)],
         staffServicePoints: [point(6, 11), point(10, 11)],
+      },
+      {
+        id: "hot",
+        kind: "hot_case",
+        categoryId: "hot",
+        tiles: rectangleTiles(12, 9, 5, 2),
+        customerServicePoints: [point(12, 11), point(13, 11), point(14, 11), point(15, 11), point(16, 11)],
+        staffServicePoints: [point(12, 11), point(16, 11)],
       },
       {
         id: "instant",
@@ -1443,14 +1455,14 @@ export function restoreStoreOperationsEngine(
 
 export function defaultCategoryWeightsForHour(hour: number): Record<StoreCategoryId, number> {
   if (hour < 10) {
-    return { drinks: 1.4, dessert: 0.4, ready_meal: 1.8, snacks: 0.5, instant: 0.4, daily_goods: 0.3, magazines: 0.5, frozen: 0.3 };
+    return { drinks: 1.4, dessert: 0.4, ready_meal: 1.8, snacks: 0.5, instant: 0.4, daily_goods: 0.3, magazines: 0.5, frozen: 0.3, hot: 0.5 };
   }
   if (hour < 14) {
-    return { drinks: 1.3, dessert: 0.6, ready_meal: 2.2, snacks: 0.7, instant: 1.1, daily_goods: 0.3, magazines: 0.4, frozen: 0.4 };
+    return { drinks: 1.3, dessert: 0.6, ready_meal: 2.2, snacks: 0.7, instant: 1.1, daily_goods: 0.3, magazines: 0.4, frozen: 0.4, hot: 0.3 };
   }
   if (hour < 18) {
-    return { drinks: 1.2, dessert: 1.2, ready_meal: 0.7, snacks: 1.7, instant: 0.7, daily_goods: 0.7, magazines: 1.0, frozen: 0.6 };
+    return { drinks: 1.2, dessert: 1.2, ready_meal: 0.7, snacks: 1.7, instant: 0.7, daily_goods: 0.7, magazines: 1.0, frozen: 0.6, hot: 0.5 };
   }
-  return { drinks: 1.4, dessert: 0.7, ready_meal: 1.8, snacks: 1.0, instant: 1.1, daily_goods: 1.2, magazines: 0.6, frozen: 0.7 };
+  return { drinks: 1.4, dessert: 0.7, ready_meal: 1.8, snacks: 1.0, instant: 1.1, daily_goods: 1.2, magazines: 0.6, frozen: 0.7, hot: 0.9 };
 }
 import { planStoreStaffTasks } from "./storeTaskScheduler.js";

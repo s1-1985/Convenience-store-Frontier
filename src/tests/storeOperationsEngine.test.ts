@@ -502,14 +502,16 @@ describe("individual store operations engine", () => {
       engine.advance(0.25, context({ arrivalRatePerMinute: 40 }));
       elapsed += 0.25;
       walker = engine.getSnapshot().customers.find(
-        // "frozen" (ADR-0003) is currently the only StoreCategoryId on a "frozen_case"
-        // fixture in the default layout, so it has no same-kind partner to swap with
+        // "frozen" (ADR-0003) and "hot" (ADR-0004) are each currently the only
+        // StoreCategoryId on their respective single-fixture kind in the default
+        // layout, so neither has a same-kind partner to swap with
         // (swapFixtureCategories requires fixtureA.kind === fixtureB.kind) — excluded
         // here since this test is about swap re-routing, not the no-partner case.
         (customer) =>
           customer.state === "walking_to_shelf" &&
           customer.targetCategory !== undefined &&
-          customer.targetCategory !== "frozen",
+          customer.targetCategory !== "frozen" &&
+          customer.targetCategory !== "hot",
       );
     }
     expect(walker).toBeDefined();
@@ -563,7 +565,7 @@ describe("individual store operations engine", () => {
       arrivalRatePerMinute: 30,
       customerArchetypePools: [
         {
-          categoryWeights: { drinks: 0, dessert: 0, ready_meal: 1, snacks: 0, instant: 0, daily_goods: 0, magazines: 0, frozen: 0 },
+          categoryWeights: { drinks: 0, dessert: 0, ready_meal: 1, snacks: 0, instant: 0, daily_goods: 0, magazines: 0, frozen: 0, hot: 0 },
           archetypeRows: [3, 18],
           weight: 1,
         },
