@@ -100,6 +100,31 @@ describe("individual store operations engine", () => {
     expect(after.kpis.enteredCustomers).toBe(0);
   });
 
+  it("completes the full entry-shop-queue-checkout-exit loop under production-realistic frame pacing", () => {
+    // storeGameRuntime.ts drives advance() from requestAnimationFrame: many small
+    // real deltaSeconds (~1/60s) each carrying a chunk of simMinutesElapsed, because the
+    // real Simulation's clock can race far ahead of wall-clock time. This mirrors that
+    // pacing end-to-end (rather than the coarse 0.25s steps `run()` uses elsewhere in
+    // this file) to guard against the whole pipeline — not just the spawn accumulator —
+    // regressing under the pacing production code actually uses.
+    const engine = createStoreOperationsEngine(1977);
+    engine.setStaffAssignments({ register: 2, replenishment: 0, cleaning: 0 });
+
+    const frameDeltaSeconds = 1 / 60;
+    const perFrameSimMinutes = 20 / 60; // ~20 sim-minutes per real second, matching an observed compressed day
+    for (let frame = 0; frame < 60 * 60; frame += 1) {
+      engine.advance(
+        frameDeltaSeconds,
+        context({ arrivalRatePerMinute: 12, simMinutesElapsed: perFrameSimMinutes }),
+      );
+    }
+    const after = engine.getSnapshot();
+
+    expect(after.kpis.enteredCustomers).toBeGreaterThan(0);
+    expect(after.kpis.transactions).toBeGreaterThan(0);
+    expect(after.kpis.revenue).toBeGreaterThan(0);
+  });
+
   it("creates queue pressure before non-register priorities fall back to checkout", () => {
     const engine = createStoreOperationsEngine(2026);
     engine.setStaffAssignments({ register: 0, replenishment: 2, cleaning: 0 });
