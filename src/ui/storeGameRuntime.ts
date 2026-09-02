@@ -281,6 +281,27 @@ function arrivalRatePerMinute(): number {
   return base * pressure;
 }
 
+// arrivalRatePerMinute() is visits per *sim*-minute, but the real Simulation's clock
+// (main.ts's setInterval, sped up by the speed selector) advances many sim-minutes per
+// real second — nowhere near the "1 sim-minute per real-minute" pace that a plain
+// real-elapsed-seconds delta would imply. Tracking actual sim-minutes elapsed between
+// frames (from day/hour/minute) lets the spawn accumulator in
+// StoreOperationsEngine.advance() use the correct time basis regardless of how fast the
+// real clock is currently ticking. Only accumulated while isPlaying(): manual "+15分"/
+// "翌日まで" stepping should not itself pop a crowd of customers into existence.
+let lastSimAbsoluteMinutes: number | undefined;
+
+function simMinutesElapsedThisFrame(): number {
+  const current = (currentDay() - 1) * 1440 + currentHour() * 60 + currentMinute();
+  if (lastSimAbsoluteMinutes === undefined || !isPlaying()) {
+    lastSimAbsoluteMinutes = current;
+    return 0;
+  }
+  const delta = Math.max(0, current - lastSimAbsoluteMinutes);
+  lastSimAbsoluteMinutes = current;
+  return delta;
+}
+
 function engineContext(focus?: StoreCategoryId): StoreEngineContext {
   const weights = defaultCategoryWeightsForHour(currentHour());
   if (focus) weights[focus] *= 1.35;
@@ -289,6 +310,7 @@ function engineContext(focus?: StoreCategoryId): StoreEngineContext {
     isOpen: isStoreOpen(),
     hour: hour + currentMinute() / 60,
     arrivalRatePerMinute: arrivalRatePerMinute(),
+    simMinutesElapsed: simMinutesElapsedThisFrame(),
     categoryWeights: weights,
     requestedStaffCount: currentStaffing(),
     customerArchetypePools: gameSession()

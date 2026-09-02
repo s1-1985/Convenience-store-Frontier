@@ -172,6 +172,17 @@ export interface StoreEngineContext {
    * has loaded) falls back to the flat behavior.
    */
   customerArchetypePools?: CustomerArchetypePool[];
+  /**
+   * Sim-minutes that elapsed since the previous advance() call, as tracked from the
+   * real Simulation's day/hour/minute (see storeGameRuntime.ts's simMinutesElapsedThisFrame()).
+   * arrivalRatePerMinute is expressed per sim-minute, but deltaSeconds is real
+   * wall-clock time used for movement/checkout animation pacing — those two clocks run
+   * at very different rates once the real Simulation's clock is sped up or fast-forwarded,
+   * so spawning needs its own sim-time basis instead of reusing deltaSeconds. When absent
+   * (e.g. existing tests that construct a context directly), spawning falls back to
+   * treating deltaSeconds as if it were sim-seconds, matching the pre-existing behavior.
+   */
+  simMinutesElapsed?: number;
 }
 
 export interface StoreOperationsSnapshot {
@@ -1172,7 +1183,8 @@ export function createStoreOperationsEngine(
       }
 
       if (context.isOpen) {
-        spawnAccumulator += Math.max(0, context.arrivalRatePerMinute) * safeDelta / 60;
+        const spawnMinutes = context.simMinutesElapsed ?? safeDelta / 60;
+        spawnAccumulator += Math.max(0, context.arrivalRatePerMinute) * spawnMinutes;
         while (spawnAccumulator >= 1) {
           spawnAccumulator -= 1;
           spawnCustomer(context);
