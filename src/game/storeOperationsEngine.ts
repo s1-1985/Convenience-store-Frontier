@@ -81,6 +81,13 @@ export interface StoreCustomerAgent {
   regular: boolean;
   variant: number;
   reason?: "completed" | "stockout" | "price" | "queue_abandonment" | "unreachable";
+  /**
+   * Cumulative tile-distance walked (see moveAlongPath()), used by
+   * src/ui/storeArtAssets.ts's resolveWalkFrame() to derive a walk-cycle frame index.
+   * Never reset or wrapped — only ever read via a modulo, so unbounded float growth over
+   * a long session stays well within float64 precision.
+   */
+  walkCyclePhase: number;
 }
 
 export type StaffState =
@@ -105,6 +112,8 @@ export interface StoreStaffAgent {
   targetCategory?: StoreCategoryId;
   carryUnits: number;
   workRemainingSeconds: number;
+  /** See StoreCustomerAgent.walkCyclePhase. */
+  walkCyclePhase: number;
   variant: number;
 }
 
@@ -624,11 +633,12 @@ function nearestIntegerTile(agent: { x: number; y: number }): TilePoint {
 }
 
 function moveAlongPath(
-  agent: { x: number; y: number; path: TilePoint[] },
+  agent: { x: number; y: number; path: TilePoint[]; walkCyclePhase?: number },
   deltaSeconds: number,
   speed: number,
 ): boolean {
   let remainingDistance = Math.max(0, deltaSeconds) * speed;
+  const requestedDistance = remainingDistance;
   while (remainingDistance > 0 && agent.path.length > 0) {
     const target = agent.path[0];
     if (!target) break;
@@ -646,6 +656,10 @@ function moveAlongPath(
     agent.y += (dy / distance) * remainingDistance;
     remainingDistance = 0;
   }
+  // Accumulates actual tile-distance covered (not the requested distance, which can
+  // exceed what's left of the path) so resolveWalkFrame() can derive a walk-cycle frame
+  // from real movement. `?? 0` guards a restored save from before this field existed.
+  agent.walkCyclePhase = (agent.walkCyclePhase ?? 0) + (requestedDistance - remainingDistance);
   return agent.path.length === 0;
 }
 
@@ -832,6 +846,7 @@ export function createStoreOperationsEngine(
       patienceRemainingSeconds: 13 + random() * 16 + serviceTrust * 6,
       regular: random() < 0.08 + serviceTrust * 0.45,
       variant,
+      walkCyclePhase: 0,
     };
     nextCustomerNumber += 1;
     const firstCategory = customer.wishList.shift();
@@ -976,6 +991,7 @@ export function createStoreOperationsEngine(
         carryUnits: 0,
         workRemainingSeconds: 0,
         variant: staff.length % 4,
+        walkCyclePhase: 0,
       });
     }
     if (staff.length > lastRequestedStaffCount) staff = staff.slice(0, lastRequestedStaffCount);

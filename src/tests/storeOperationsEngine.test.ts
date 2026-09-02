@@ -662,4 +662,27 @@ describe("individual store operations engine", () => {
 
     expect(omitted.getSnapshot().inventories).toEqual(explicitZero.getSnapshot().inventories);
   });
+
+  it("accumulates walkCyclePhase on customers and staff as they move", () => {
+    const engine = createStoreOperationsEngine(2024);
+    run(engine, 20, context({ arrivalRatePerMinute: 40 }));
+
+    const snapshot = engine.getSnapshot();
+    const movedCustomers = snapshot.customers.filter(
+      (customer) => customer.state !== "gone" && customer.walkCyclePhase > 0,
+    );
+    const movedStaff = snapshot.staff.filter((member) => member.walkCyclePhase > 0);
+    expect(movedCustomers.length).toBeGreaterThan(0);
+    expect(movedStaff.length).toBeGreaterThan(0);
+  });
+
+  it("does not advance walkCyclePhase for a customer with no path to walk", () => {
+    const engine = createStoreOperationsEngine(2024);
+    engine.advance(0.01, context({ arrivalRatePerMinute: 0 }));
+    const before = engine.getSnapshot().customers.map((customer) => customer.walkCyclePhase);
+
+    engine.advance(1, context({ arrivalRatePerMinute: 0, isOpen: false }));
+    const after = engine.getSnapshot().customers.map((customer) => customer.walkCyclePhase);
+    expect(after).toEqual(before);
+  });
 });

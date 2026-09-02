@@ -332,6 +332,27 @@ export function drawFixtureArtwork(
   };
 }
 
+// Walk-cycle frames available per facing direction in customers.png/staff.png today.
+// Both atlases are single-frame-per-facing (STORE_ART_ATLAS_SPEC: 4 columns = facing
+// only, no frame dimension yet — see docs/store-art-assets.md). Bump these and extend
+// the atlas layout (row*(4*N) + facingColumn*N + frame, N new columns per facing) once
+// multi-frame walk-cycle art is integrated; resolveWalkFrame() and the cell math in
+// drawAgentArtwork() below are already frame-aware, so no other code change would be
+// needed at that point.
+const CUSTOMER_FRAMES_PER_DIRECTION = 1;
+const STAFF_FRAMES_PER_DIRECTION = 1;
+
+// Tile-distance covered per walk-cycle frame advance. Only affects the drawn frame once
+// a role's *_FRAMES_PER_DIRECTION is raised above 1 (resolveWalkFrame short-circuits to
+// frame 0 otherwise, matching today's single-frame atlases exactly).
+const WALK_FRAME_STEP_TILES = 0.4;
+
+export function resolveWalkFrame(walkCyclePhase: number | undefined, framesPerDirection: number): number {
+  if (framesPerDirection <= 1) return 0;
+  const phase = walkCyclePhase ?? 0;
+  return Math.floor(phase / WALK_FRAME_STEP_TILES) % framesPerDirection;
+}
+
 export function drawAgentArtwork(
   context: CanvasRenderingContext2D,
   assets: StoreArtAssets,
@@ -341,11 +362,14 @@ export function drawAgentArtwork(
   task?: StoreStaffTask,
 ): boolean {
   const facing = resolveAgentFacing(agent);
-  const column = FACING_COLUMN[facing];
+  const facingColumn = FACING_COLUMN[facing];
   const bob = Math.sin(performance.now() / 170 + agent.variant) * 1.3;
   const isStaff = role === "staff";
   const cellWidth = isStaff ? STAFF_CELL_WIDTH : CUSTOMER_CELL_WIDTH;
   const cellHeight = isStaff ? STAFF_CELL_HEIGHT : CUSTOMER_CELL_HEIGHT;
+  const framesPerDirection = isStaff ? STAFF_FRAMES_PER_DIRECTION : CUSTOMER_FRAMES_PER_DIRECTION;
+  const frame = resolveWalkFrame(agent.walkCyclePhase, framesPerDirection);
+  const columnsPerRow = 4 * framesPerDirection;
   const row = isStaff
     ? STAFF_ROW[task ?? "register"]
     : CUSTOMER_ROWS[Math.abs(agent.variant) % CUSTOMER_ROWS.length] ?? 0;
@@ -362,8 +386,8 @@ export function drawAgentArtwork(
   drawAtlasCell(
     context,
     image,
-    row * 4 + column,
-    4,
+    row * columnsPerRow + facingColumn * framesPerDirection + frame,
+    columnsPerRow,
     cellWidth,
     cellHeight,
     {

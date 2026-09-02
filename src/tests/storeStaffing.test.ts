@@ -13,8 +13,8 @@ describe("store staffing shortcuts", () => {
   it("recommends register coverage before less urgent work when a queue is visible", () => {
     const snapshot = createStoreOperationsEngine(1977).getSnapshot();
     snapshot.staff = snapshot.staff.length > 0 ? snapshot.staff : [
-      { id: "staff-1", x: 0, y: 0, task: "register", state: "idle", path: [], carryUnits: 0, workRemainingSeconds: 0, variant: 0 },
-      { id: "staff-2", x: 0, y: 0, task: "cleaning", state: "idle", path: [], carryUnits: 0, workRemainingSeconds: 0, variant: 1 },
+      { id: "staff-1", x: 0, y: 0, task: "register", state: "idle", path: [], carryUnits: 0, workRemainingSeconds: 0, variant: 0, walkCyclePhase: 0 },
+      { id: "staff-2", x: 0, y: 0, task: "cleaning", state: "idle", path: [], carryUnits: 0, workRemainingSeconds: 0, variant: 1, walkCyclePhase: 0 },
     ];
     snapshot.queueCustomerIds = ["a", "b", "c", "d"];
     snapshot.litter = [{ id: "litter", x: 1, y: 1 }, { id: "litter-2", x: 2, y: 2 }];
