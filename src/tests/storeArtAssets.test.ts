@@ -18,10 +18,10 @@ describe("store art asset mapping", () => {
 
   it("maps every fixture in the default store to artwork, including frozen/hot's fixture-bases.png shells", () => {
     // frozen_case/hot_case (ADR-0003/ADR-0004) have real fixture-bases.png cells
-    // (see docs/store-fixture-zones.md) even though no merchandise.png overlay art
-    // exists for either category yet — resolveFixtureArtIndex now returns a defined
+    // (see docs/store-fixture-zones.md) — resolveFixtureArtIndex returns a defined
     // (if fixtures.png-meaningless) value for them so drawFixtureArtwork reaches the
-    // fixtureBases.png branch instead of falling back to the plain rectangle.
+    // fixtureBases.png branch instead of falling back to the plain rectangle. Both
+    // categories also have real merchandise.png overlay art now (2026-09-03).
     const layout = createDefaultStoreLayout();
     const snapshot = createStoreOperationsEngine(1977).getSnapshot();
     for (const fixture of layout.fixtures) {
@@ -55,8 +55,8 @@ describe("store art asset mapping", () => {
   it("leaves frozen_case/hot_case fixtures without art undrawn (fallback rectangle applies)", () => {
     // These synthetic fixtures have no categoryId, so resolveFixtureArtIndex returns
     // undefined regardless of kind (both kinds now have a StoreCategoryId targeting
-    // them in the default layout — "frozen"/ADR-0003, "hot"/ADR-0004 — but neither has
-    // merchandise.png overlay art yet, covered by the previous test instead).
+    // them in the default layout — "frozen"/ADR-0003, "hot"/ADR-0004 — and both now
+    // have merchandise.png overlay art too, covered by the previous test instead).
     const snapshot = createStoreOperationsEngine(1977).getSnapshot();
     const frozenCase = { id: "frozen-test", kind: "frozen_case" as const, tiles: [], customerServicePoints: [], staffServicePoints: [] };
     const hotCase = { id: "hot-test", kind: "hot_case" as const, tiles: [], customerServicePoints: [], staffServicePoints: [] };

@@ -473,6 +473,46 @@ PR #75(0-H)マージ後、ユーザーから「gptの生成したものを渡す
 検討する際の参考資料として`art-source/chatgpt-era-fixture-catalogs-v1/`に
 残しておく。
 
+## 0-J. 続く同日セッション(2026-09-03、frozen/hotの陳列商品アートを統合)
+
+PR #76(0-I)マージ後、「続けて」の指示で続行。ChatGPT側の作り直しを待つ間に
+進められる作業として、`art-source/chatgpt-adopted-v1/`(2026-09-01受領、什器と
+商品が正しく分離されていることを目視確認済みの素材)を調べたところ、
+`product_contents/コンビニ商品棚ピクセルアート素材集.png`に中華まん(8種)と
+パッケージ入り冷凍食品(複数種)の陳列アイコンが本当に分離された状態で
+含まれていることを発見した。2.2が長らく残していた「frozen/hotに陳列商品アートが
+無い」というギャップを、ChatGPTの作り直しを待たずにこの既存素材で埋めた。
+
+- Python(PIL+numpy、alpha透過を利用した連結成分・列ギャップ検出)で中華まん8種
+  ・冷凍食品2種(1種を複製せず使えるだけの元絵は2種のみだったため)を個別に
+  切り出し、`merchandise.png`を7列→9列(index 7=frozen、8=hot)へ拡張した
+- `src/ui/storeArtAssets.ts`: `MERCHANDISE_INDEX`に`frozen: 7`・`hot: 8`を追加。
+  **7列決め打ちだった`drawFixtureArtwork`内の横方向クロップ計算
+  (`sourceX = (merchandiseIndex % 7) * FIXTURE_CELL_WIDTH`)が9列化で壊れる
+  ところだった**ため、`MERCHANDISE_COLUMNS`定数(9)を新設してハードコードを置換した
+  (見落としやすい落とし穴、次に列を増やす際も同じ箇所に注意)。
+  `STORE_ART_ATLAS_SPEC.merchandise`の寸法も更新
+- アイコンの配置位置は`shelf`/`cold_case`系(セル全体へ均等配置)とは別の考え方が
+  必要だった: `frozen_case`(チェスト式冷凍庫)は陳列面が実際の什器シェル画像の
+  上部・ワイヤーバスケット部分に限られており、既存カテゴリと同じ「セル全体に
+  均等配置」ではみ出して不自然に見えたため(Playwrightで実機確認して発覚)、
+  什器シェル画像を目視で計測し、その陳列面の座標に合わせて配置し直した。
+  `hot_case`は上下2段のトレイ部分がセルの大部分を占めるため、均等配置のままで
+  自然に収まった
+- `data/assets/store/fixtures-manifest.json`(merchandiseにfrozen/hot追加、
+  fixtureBasesのacceptsにも反映)・`docs/store-art-assets.md`・
+  `docs/store-fixture-zones.md`(2.2解消の記録)・`art-source/README.md`を更新
+- おでんの絵は同素材内に見つからなかったため、中華まんのみでHOTカテゴリの
+  陳列を代表させている(既存の他カテゴリも複数SKUを1カテゴリの絵で代表させて
+  いるのと同じ粒度)
+- `npx tsc --noEmit -p .`・`npx vitest run`(181件全通過)・Playwrightで実機確認
+  (店舗を開いて`frozen_case`/`hot_case`に実際に商品が表示され、什器シェルの
+  陳列面に自然に収まっていることをスクリーンショットで確認)
+
+**残っている作業**: 元素材が2種類しかなかったため冷凍食品側のバリエーションが
+少ない(同じアイコンの反復)。将来ChatGPT側から真に分離されたfrozen専用素材
+(0-Iのブリーフ参照)が届いた際は、このindex 7のセルを差し替えるとよい。
+
 ## 1. このセッションでやったこと(時系列サマリ)
 
 ### 1.1 前半: バグ修正・客層拡張(PR #52, #53)
@@ -627,19 +667,17 @@ manifest/atlas更新→typecheck・vitest・Playwrightで確認→コミット)�
 シンプルなので難しくない: PIL+scipy.ndimageでalphaチャンネルの連結成分を
 ラベリングし、bboxで切り出すだけ)。
 
-### 2.2 frozen_case/hot_caseがまだプレイ上で見えない → 両方解消済み(2026-09-02)
+### 2.2 frozen_case/hot_caseがまだプレイ上で見えない → 完全解消済み(2026-09-03)
 
 ~~`FixtureKind`とアセットはPR #55/#57で用意済みだが、これらの種類の什器を
 実際に配置する経路が無い~~ → `frozen_case`は`design/DECISIONS/ADR-0003-add-frozen-food-category.md`
 (上記0-B参照)で`category_frozen_food`を新設し、デフォルトレイアウトへ配置済み。
 `hot_case`も`design/DECISIONS/ADR-0004-add-hot-snack-category.md`(上記0-C参照)で
-`category_hot_snack`を新設し、同様に配置済み。残るのは両カテゴリの陳列商品アート
-(`merchandise.png`)がまだ無いことのみ(ChatGPT側の担当、届き次第
-`FIXTURE_INDEX`/`MERCHANDISE_INDEX`へ追記)。
-
-残っているのは`hot_case`(おでん・中華まん等)のみ。ADR-0003は意図的にHOTケースを
-対象外とした(理由はADR本文参照)。追加する場合も同様にバランス数値の決定を伴う
-ゲームデザイン判断であり、独断で決めるべきではない。
+`category_hot_snack`を新設し、同様に配置済み。什器シェル(`fixture-bases.png`)は
+PR #57時点で実アートあり、`resolveFixtureArtIndex`のバグ修正(0-G)で実際に描画
+されるようになった。~~残っていた両カテゴリの陳列商品アート(`merchandise.png`)~~も
+2026-09-03(下記0-J参照)に追加し、`frozen_case`/`hot_case`とも什器・商品ともに
+本物のアートで描画されるようになった。
 
 ### 2.3 歩行アニメーション → customers.png(客)は解消済み(2026-09-03)、staff.png(店員)はまだ
 

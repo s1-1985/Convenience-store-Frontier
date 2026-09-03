@@ -34,7 +34,10 @@
 キャラフェーズ1の店員8種→客アーキタイプ、2026-09-03に追加した
 `characters/base/コンビニ客の歩行スプライトシート.png`の4キャラクター→
 客アーキタイプ4種・`customers.png`行32-35、実際に複数コマ歩行差分を持つ
-初めての行)は`data/assets/store/`側の
+初めての行、同じく2026-09-03に`product_contents/コンビニ商品棚ピクセルアート
+素材集.png`から切り出した冷凍食品(パッケージ入り冷凍食品)・中華まんの
+アイコン→`merchandise.png`のindex 7/8、frozen_case/hot_caseで初めて商品が
+表示されるようになった分)は`data/assets/store/`側の
 `fixtures-manifest.json`/`customers-manifest.json`を参照。この
 ディレクトリの中身と統合先の対応関係、および残りの未統合分の一覧は
 `docs/store-art-assets.md`と`HANDOFF.md`を参照すること。
