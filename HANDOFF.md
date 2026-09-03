@@ -451,14 +451,27 @@ PR #75(0-H)マージ後、ユーザーから「gptの生成したものを渡す
 原本一式は`art-source/chatgpt-era-fixture-catalogs-v1/`へコミットのみ行った
 (`art-source/README.md`に詳細と上記の矛盾の記録を追記)。
 
-**次セッションへの引き継ぎ(要ユーザー判断)**:
-- 01-05を「1枚絵の完成品什器」として割り切って使う(在庫連動の商品表示を
-  諦める代わりに、見た目のクオリティを上げる)か
-- ChatGPT側へ「什器本体のみ(商品中身なし)」を明示的に依頼し直すか
-- 06-09は解像度の都合上、年代別ビジュアル方針(`docs/store-fixture-zones.md`5節)
-  の設計参考資料としてのみ使い、実装素材としては使わない方向で合意を取るか
+**次セッションへの引き継ぎ(要ユーザー判断)** → ユーザーへ選択肢
+(ChatGPT側へ作り直し依頼/1枚絵として割り切って使う/今は保留して別作業)を
+確認したところ、**「ChatGPT側へ作り直しを依頼」が選択された**。これを受けて
+`docs/handoffs/2026-09-03-fixture-art-rework-brief-for-chatgpt.md`を新設し、
+以下を依頼した:
+- **最優先**: `frozen_case`/`hot_case`の商品オーバーレイ(`merchandise.png`側、
+  現状未着手のまま残っている既知のギャップ、docs/store-fixture-zones.md参照)を
+  「什器本体」と「商品オーバーレイ」を**別ファイルとして**生成すること
+- 次点: 常温棚・冷蔵ケースの空什器バリエーション追加(同じく別ファイルで)
+- 年代別ビジュアル(1970s〜2020s)は、年代ゲーティングの仕組み自体が未実装のため
+  今回はスコープ外として明示的に依頼から外した
+- 前回の「分離済みと自己申告していたが実際は違った」問題を踏まえ、納品前に
+  ChatGPT自身が「什器本体だけを単独で見て商品が本当に描かれていないか」を
+  目視確認してから渡すよう明記した
 
-いずれも独断で決めず、次回ユーザーに確認してから着手すること。
+次のセッションは、このブリーフに沿った新しい素材が届くのを待つか、届いていれば
+それを受け取って統合作業(2.1と同じ要領: alpha透過切り出し→manifest/atlas更新→
+検証→コミット)に着手すること。06-09(年代別カタログ・総覧インフォグラフィック)は
+実装素材としては使わず、`docs/store-fixture-zones.md`5節の年代別ビジュアル方針を
+検討する際の参考資料として`art-source/chatgpt-era-fixture-catalogs-v1/`に
+残しておく。
 
 ## 1. このセッションでやったこと(時系列サマリ)
 
@@ -727,6 +740,7 @@ shelfCapacityを重みとした比例配分、残差は最後のカテゴリへ�
 - `docs/visual-numeric-engine-integration.md` — 見た目Canvasと数値エンジンの統合状況(フェーズ1完了、フェーズ2の課題)
 - `docs/store-art-assets.md` — 全アトラスアセットの仕様一覧(セルサイズ・列/行数)
 - `docs/handoffs/2026-09-01-fixture-art-brief-for-chatgpt.md` — ChatGPTへ渡した什器アセット作業ブリーフ(温度帯什器の技術仕様)
+- `docs/handoffs/2026-09-03-fixture-art-rework-brief-for-chatgpt.md` — 什器と商品中身が分離されていなかった問題を受けた作り直し依頼ブリーフ(0-I参照)
 - `data/assets/store/customers-manifest.json` — 客32アーキタイプの行対応(年齢帯・性別・職業・出典)
 - `data/assets/store/fixtures-manifest.json` — 什器ベース4種・商品オーバーレイの対応
 - `reviews/results/customer-cohort-shopping-behavior.md` — 客の買い物行動・出現確率実装のレビュー記録(旧作業分)
