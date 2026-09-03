@@ -90,6 +90,15 @@ body.store-game-mode #app {
 .live-incident strong { white-space: nowrap; font-size: 12px; }
 .live-incident span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
 
+/* Stacks below .live-incident (the live per-frame incident banner) rather than
+   overlapping it — both can be visible at once (a moment-to-moment queue/litter
+   incident and a day-level 赤字/欠品 diagnosis are independent signals). */
+.day-alert {
+  top: max(88px, calc(env(safe-area-inset-top) + 80px));
+  background: rgba(94, 63, 10, .95);
+}
+.day-alert[data-severity="critical"] { border-color: #fff1aa; background: rgba(150, 35, 30, .97); }
+
 .store-game-nav {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));

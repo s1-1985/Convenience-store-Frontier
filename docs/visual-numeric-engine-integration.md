@@ -247,6 +247,64 @@ categoryAreaへ反映する」という本格的な双方向統合は、可変�
 互換性など新たな設計判断を伴うため、着手にはユーザーへの追加確認が必要と判断し、
 今回は見送った。着手する場合は次のセッションでADR起票から始めること。
 
+## フェーズ2e: 日次経営診断(buildDashboardAlerts)をCanvas上に表示(2026-09-03)
+
+ユーザーからプレイ画面のスクリーンショットを見た感想として「ゲームになる気が
+しない」「見た目・演出が単調」「目標・緊張感が弱い」との指摘があった。調査の
+過程で、20倍速で放置していたプレイが2日目の頭でピタッと止まる現象を発見し、
+原因を追跡した。
+
+結論として、これはバグではなく既存の`main.ts`側「重大問題を検出したら自動
+停止」機能(`autoStopForLatestReport()`、日替わりのたびに`buildDashboardAlerts()`
+の結果をチェック)が実際に発火していたものだった。`buildDashboardAlerts()`
+(`presentation.ts`)には「大幅な赤字」「レジ待ちで多数離脱」「補充遅延で棚が
+空いている」「在庫そのものが不足」「廃棄負担が大きい」「店舗作業が積み残されて
+いる」というcritical/warning2段階の具体的な診断文言が既に用意されていたが、
+**この情報も、それによる自動停止の理由も、「詳細」ボタンで裏の数値ダッシュボード
+(`#app`、既定で非表示)を開かない限り一切見えなかった**。Canvas側には
+`detectStoreIncidents()`(`storeIncidents.ts`)による別系統のリアルタイム警告
+バナー(`.live-incident`、レジ行列・欠品遭遇・値上げ拒否・汚れ・機会損失を
+毎フレーム判定)が既にあり、そちらは元から見えていたが、日次の経営診断
+(赤字・廃棄・作業積み残しなど)は完全に別系統で、Canvas上に一切出ていなかった。
+
+### 実施内容
+
+- `storeGameRuntime.ts`に`latestDayAlert()`(非公開関数)を追加。共有セッションの
+  直近完了日`CompetitiveDailyReport`を`buildDashboardAlerts()`へ渡し、critical
+  優先・無ければwarningの1件を返す(`presentation.ts`から`buildDashboardAlerts`/
+  `DashboardAlert`をimport)
+- 店舗シェルへ新しいバナー要素`[data-day-alert]`を追加。既存の`.live-incident`
+  (`[data-live-incident]`、リアルタイム警告)の直下に重ならず積み重なる位置へ
+  CSS配置し(`storeGame.css`の`.day-alert`)、critical時は同じ赤系配色にした。
+  `renderDayAlert()`が毎フレーム`latestDayAlert()`の結果で内容を更新し、
+  「本日:」を前置してリアルタイム警告と区別できるようにした
+- 既存の`detectStoreIncidents()`側の判定・自動停止トリガー(`incident.severity
+  === "critical"`時に`play-button`をクリック)には一切手を加えていない。新しい
+  バナーは表示のみの追加で、`main.ts`側の日次自動停止ロジックにも変更は無い
+  (自動停止が発火したとき、その理由となったアラートが結果的にこのバナーに
+  表示されるようになっただけ)
+- 回帰テスト: `src/tests/storeGameShell.test.ts`に1本追加(ソーステキストへの
+  `data-day-alert`/`buildDashboardAlerts(latest)`/`renderDayAlert(shell)`の
+  存在を確認する、既存3本と同じ様式のスモークテスト)
+
+### 検証
+
+- `npx tsc --noEmit -p .`: エラー無し
+- `npx vitest run`: 184件全通過(既存183件 + 新規1件)
+- Playwright: 20倍速で放置し、実際に「在庫そのものが不足」のcriticalアラートが
+  赤いバナーとしてCanvas上に表示されること、リアルタイム警告(レジ行列)と
+  日次診断バナーが同時に表示されても重ならず積み重なること、いずれも
+  スクリーンショットで確認
+
+### 残課題(未着手のまま)
+
+- `detectStoreIncidents()`(リアルタイム)と`buildDashboardAlerts()`(日次)は
+  依然として独立した2系統のまま。将来的に両者を1つの優先順位付きリストへ統合
+  するかどうかは今回判断していない
+- 「目標・緊張感が弱い」という指摘全体への対応はこのバナー追加だけでは不十分な
+  可能性が高い(推論)。演出面(音・画面効果・危機発生時のCanvas全体の見た目
+  変化など)は未着手
+
 ## 検証方法(実施済み)
 
 - 各ステップで`npx tsc --noEmit -p .`と`npx vitest run`を実行し、既存テストを壊さない

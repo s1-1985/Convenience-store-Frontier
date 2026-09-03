@@ -44,6 +44,7 @@ import {
 } from "../game/storeCanvasPolicySync.js";
 import { computeRevenueTrend, summarizeStorePerformance } from "../game/storePerformance.js";
 import { detectStoreIncidents } from "../game/storeIncidents.js";
+import { buildDashboardAlerts, type DashboardAlert } from "./presentation.js";
 import {
   createStoreLayoutEditorUi,
   loadSavedStoreLayout,
@@ -138,6 +139,35 @@ function realStockoutSeverityByCategory(): Partial<Record<StoreCategoryId, numbe
   }
   if (severity.snacks !== undefined) severity.dessert = severity.snacks;
   return severity;
+}
+
+/**
+ * The most severe day-level diagnostic (赤字, レジ離脱, 補充遅延, 在庫欠品, 廃棄負担,
+ * 作業積み残し — see buildDashboardAlerts() in presentation.ts) for the shared real
+ * Simulation's most recently completed day, for display on the Canvas via
+ * renderDayAlert() below.
+ *
+ * This is deliberately a separate signal from detectStoreIncidents() (storeIncidents.ts,
+ * shown in the adjacent .live-incident banner): that one reads live per-frame Canvas
+ * KPIs (queue length, litter, etc.) for moment-to-moment feedback, while this one reads
+ * the real Simulation's own end-of-day report for economic-level diagnosis. Both existed
+ * before this change; only this Canvas-side display of the latter is new (previously it
+ * only appeared in the numeric dashboard behind the "詳細" button — see
+ * docs/visual-numeric-engine-integration.md, "フェーズ2e").
+ *
+ * Returns undefined before the shared session has loaded, before any day has completed,
+ * or when the latest day has nothing above "info" severity to report.
+ */
+function latestDayAlert(): DashboardAlert | undefined {
+  const session = gameSession();
+  if (!session) return undefined;
+  const latest = session.session.simulation.getAllDailyReports().at(-1);
+  if (!latest) return undefined;
+  const alerts = buildDashboardAlerts(latest);
+  return (
+    alerts.find((alert) => alert.severity === "critical") ??
+    alerts.find((alert) => alert.severity === "warning")
+  );
 }
 
 function timeBlockForHour(scenario: ScenarioBundle, hour: number): TimeBlockId {
@@ -808,6 +838,7 @@ function buildShell(): HTMLElement {
       <canvas id="store-game-canvas" width="1080" height="500"></canvas>
       <button type="button" class="store-game-menu" data-game-action="detail" aria-label="詳細設定">詳細</button>
       <div class="live-incident" data-live-incident hidden><strong></strong><span></span></div>
+      <div class="live-incident day-alert" data-day-alert hidden><strong></strong><span></span></div>
       <div class="orientation-message">端末を横向きにしてください</div>
     </section>
     <nav class="store-game-nav" aria-label="主要メニュー">
@@ -1205,6 +1236,27 @@ function renderLiveIncident(shell: HTMLElement, snapshot: StoreOperationsSnapsho
   }
 }
 
+// Surfaces the real Simulation's own end-of-day diagnosis (latestDayAlert() above) on
+// the Canvas, so a critical alert (e.g. 大幅な赤字/レジ待ちで多数離脱) is visible where
+// the player actually looks — including when it's what silently paused playback via
+// main.ts's own day-boundary auto-stop (that one has no Canvas-visible reason on its
+// own; this banner supplies it for free since it reads the same daily report).
+function renderDayAlert(shell: HTMLElement): void {
+  const banner = shell.querySelector<HTMLElement>("[data-day-alert]");
+  if (!banner) return;
+  const alert = latestDayAlert();
+  if (!alert) {
+    banner.hidden = true;
+    return;
+  }
+  banner.hidden = false;
+  banner.dataset.severity = alert.severity;
+  const title = banner.querySelector("strong");
+  const detail = banner.querySelector("span");
+  if (title) title.textContent = `本日:${alert.title}`;
+  if (detail) detail.textContent = alert.detail;
+}
+
 function bindNavigation(
   shell: HTMLElement,
   layoutEditor: StoreLayoutEditorUi,
@@ -1545,6 +1597,7 @@ function start(): void {
     const snapshot = engine.getSnapshot();
     drawFrame(context, layout, snapshot, layoutEditor.isOpen());
     renderLiveIncident(shell, snapshot);
+    renderDayAlert(shell);
     const timeButton = shell.querySelector<HTMLButtonElement>("[data-game-action='time']");
     if (timeButton) timeButton.setAttribute("aria-pressed", String(isPlaying()));
 

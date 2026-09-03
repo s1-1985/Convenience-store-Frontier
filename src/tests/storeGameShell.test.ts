@@ -26,6 +26,12 @@ describe("store game shell controls", () => {
     expect(source).toContain('optional<HTMLButtonElement>("play-button")?.click()');
   });
 
+  it("surfaces the real Simulation's day-level diagnosis (buildDashboardAlerts) on the canvas, not only behind the hidden 詳細 dashboard", () => {
+    expect(source).toContain("data-day-alert");
+    expect(source).toContain("buildDashboardAlerts(latest)");
+    expect(source).toContain("renderDayAlert(shell)");
+  });
+
   it("offers category price controls in the product panel", () => {
     expect(source).toContain("data-price-category");
     expect(source).toContain("setCategoryPrice");
