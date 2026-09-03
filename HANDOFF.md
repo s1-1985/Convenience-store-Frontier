@@ -1,6 +1,6 @@
 # HANDOFF — 引き継ぎメモ
 
-最終更新: 2026-09-02(セッションID `session_01MfcvrmAdbWq5fbzqJVR9hd`)
+最終更新: 2026-09-03(セッションID `session_01MfcvrmAdbWq5fbzqJVR9hd`、内容は2026-09-02分の記録の仕上げ)
 対象ブランチ: `claude/review-md-files-ktplye`(mainに追従、都度リセットして使う運用)
 
 このファイルは、直近セッションで決まった仕様・実施した作業・積み残しの課題を、
@@ -616,6 +616,12 @@ shelfCapacityを重みとした比例配分、残差は最後のカテゴリへ�
 ## 5. このセッション固有の一時ファイル(次のセッションには残らない)
 
 - `/root/.claude/uploads/7033ef0c-.../*.zip` — ChatGPT製アセットの元ZIP3つ。**うちfixtures/characters(採用版)2つは2026-09-02(0.6)に`art-source/chatgpt-adopted-v1/`へgitコミット済みのため、この項目自体は解消済み**(3つ目のv1パックのみ、必要になれば再アップロード対象。2.1参照)
+- `/root/.claude/uploads/15cd1d4b-.../{54c1153a,81398bca,c5165661}-*.zip` — 0-Gで届いた
+  年代別什器アセットZIP3つ(`conveniencestorefrontiererafixtureassetspart{1,2,3}...`)。
+  **中身29枚は展開済みで`art-source/chatgpt-era-fixture-assets-v1/`へgitコミット済み
+  (PR #73)のため、この項目自体は解消済み**(`art-source/README.md`参照)。ただし
+  個体切り出し・アトラス統合自体はまだ未着手(0-G・2.1参照、次はPlaywrightが
+  使えるセッションで)
 - `/tmp/claude-0/.../scratchpad/` — 展開・切り出し済みの中間ファイル、`split_sheet.py`(alpha連結成分による自動分割スクリプト)、各種確認用コンタクトシート。すべて揮発性
 - `/root/.claude/plans/frolicking-wibbling-panda.md` — 数値エンジン統合フェーズ1(ステップA〜D)の計画書。内容は`docs/visual-numeric-engine-integration.md`に集約済みなので参照不要
 - `/root/.claude/uploads/212f8891-.../f98a0ec6-*.md` — 2026年7月の初期ブレインストーミングログ(ChatGPTとの壁打ち、約44,000行)。**照合結果は`design/PRINCIPLES.md`・`design/DECISIONS/ADR-0002-*.md`・`docs/game-design.md`4.1/4.2/5.1/8.1節へ書き出し済みのため、通常は再読み込み不要**。ただしこのログにはまだ移していない詳細(v0.9〜v1.1の数式・データ構造案、フランチャイズ・買収など試作範囲外の長期構想)が多く残っているため、将来それらが必要になった場合のみユーザーに再アップロードを依頼すること
