@@ -328,20 +328,33 @@ const ASSUMED_COST_RATIO = 0.6;
 const DAILY_OPERATING_COST = 8_000;
 const SHELF_TIER_CAPACITY_BONUS = 6;
 const SHELF_TIER_COSTS = [40_000, 90_000, 160_000];
-const MAX_SHELF_TIER = SHELF_TIER_COSTS.length;
+const MAX_ABSTRACT_SHELF_TIER = SHELF_TIER_COSTS.length;
+// ADR-0006: the 4th ("physical expansion") tier, above MAX_ABSTRACT_SHELF_TIER, actually
+// grows the fixture's tile footprint (see applyPhysicalExpansion() and
+// PHYSICAL_EXPANSION_DIRECTIVES below) instead of only bumping shelfCapacity in place.
+const PHYSICAL_EXPANSION_COST = 280_000;
+const PHYSICAL_EXPANSION_CAPACITY_BONUS = 10;
 
 export interface NextCapacityInvestment {
   cost: number;
   capacityBonus: number;
 }
 
-export function nextCapacityInvestment(tier: number): NextCapacityInvestment | undefined {
-  if (tier >= MAX_SHELF_TIER) return undefined;
-  return { cost: SHELF_TIER_COSTS[tier]!, capacityBonus: SHELF_TIER_CAPACITY_BONUS };
+export function nextCapacityInvestment(
+  category: StoreCategoryId,
+  tier: number,
+): NextCapacityInvestment | undefined {
+  if (tier < MAX_ABSTRACT_SHELF_TIER) {
+    return { cost: SHELF_TIER_COSTS[tier]!, capacityBonus: SHELF_TIER_CAPACITY_BONUS };
+  }
+  if (tier === MAX_ABSTRACT_SHELF_TIER && PHYSICAL_EXPANSION_DIRECTIVES[category]) {
+    return { cost: PHYSICAL_EXPANSION_COST, capacityBonus: PHYSICAL_EXPANSION_CAPACITY_BONUS };
+  }
+  return undefined;
 }
 
-export function maxShelfTier(): number {
-  return MAX_SHELF_TIER;
+export function maxShelfTier(category: StoreCategoryId): number {
+  return PHYSICAL_EXPANSION_DIRECTIVES[category] ? MAX_ABSTRACT_SHELF_TIER + 1 : MAX_ABSTRACT_SHELF_TIER;
 }
 
 const CUSTOMER_MOVE_SPEED = 3.2;
@@ -486,6 +499,48 @@ export function createDefaultStoreLayout(): StoreLayout {
       },
     ],
   };
+}
+
+// ADR-0006: for each category with a defined directive, the 4th shelf-capacity
+// investment tier ("拡張工事") adds these tiles to that category's fixture footprint in
+// createDefaultStoreLayout() and relocates the customerServicePoints that sat on the
+// row being built over from `relocatedFromY` to `relocatedToY` (same x's). Coordinates
+// were chosen by walking the default layout's free floor tiles (see ADR-0006 for the
+// table); a category with no entry here stays capped at the 3 abstract tiers.
+// snacks/instant keep two customerServicePoints rows (one on each long side, for
+// restocking from either aisle) — their directive only touches the row it expands into
+// (y5, relocated to y4), leaving the other side (y8) untouched.
+interface PhysicalExpansionDirective {
+  addedTiles: TilePoint[];
+  relocatedFromY: number;
+  relocatedToY: number;
+}
+
+const PHYSICAL_EXPANSION_DIRECTIVES: Partial<Record<StoreCategoryId, PhysicalExpansionDirective>> = {
+  drinks: { addedTiles: rectangleTiles(7, 3, 4, 1), relocatedFromY: 3, relocatedToY: 4 },
+  dessert: { addedTiles: rectangleTiles(12, 3, 4, 1), relocatedFromY: 3, relocatedToY: 4 },
+  ready_meal: { addedTiles: rectangleTiles(17, 3, 6, 1), relocatedFromY: 3, relocatedToY: 4 },
+  magazines: { addedTiles: rectangleTiles(24, 3, 6, 1), relocatedFromY: 3, relocatedToY: 4 },
+  snacks: { addedTiles: rectangleTiles(6, 5, 5, 1), relocatedFromY: 5, relocatedToY: 4 },
+  instant: { addedTiles: rectangleTiles(12, 5, 5, 1), relocatedFromY: 5, relocatedToY: 4 },
+  daily_goods: { addedTiles: rectangleTiles(18, 8, 5, 1), relocatedFromY: 8, relocatedToY: 9 },
+  frozen: { addedTiles: rectangleTiles(6, 11, 5, 1), relocatedFromY: 11, relocatedToY: 12 },
+  hot: { addedTiles: rectangleTiles(12, 11, 5, 1), relocatedFromY: 11, relocatedToY: 12 },
+};
+
+function applyPhysicalExpansion(fixture: StoreFixture, directive: PhysicalExpansionDirective): void {
+  fixture.tiles = [...fixture.tiles, ...directive.addedTiles];
+  fixture.customerServicePoints = fixture.customerServicePoints.map((servicePoint) =>
+    servicePoint.y === directive.relocatedFromY
+      ? { x: servicePoint.x, y: directive.relocatedToY }
+      : servicePoint,
+  );
+  const relocated = fixture.customerServicePoints.filter(
+    (servicePoint) => servicePoint.y === directive.relocatedToY,
+  );
+  if (relocated.length > 0) {
+    fixture.staffServicePoints = [relocated[0]!, relocated[relocated.length - 1]!];
+  }
 }
 
 function tileKey(tile: TilePoint): string {
@@ -1344,7 +1399,7 @@ export function createStoreOperationsEngine(
 
     investInCategoryCapacity(category: StoreCategoryId): { ok: boolean; message: string } {
       const tier = categoryTiers[category];
-      const investment = nextCapacityInvestment(tier);
+      const investment = nextCapacityInvestment(category, tier);
       if (!investment) {
         return { ok: false, message: "これ以上拡張できません" };
       }
@@ -1356,6 +1411,29 @@ export function createStoreOperationsEngine(
       categoryTiers[category] = tier + 1;
       inventories[category].shelfCapacity += investment.capacityBonus;
       changedSinceLastDay = true;
+
+      // ADR-0006: the 4th tier physically grows the fixture instead of only bumping
+      // shelfCapacity. Relocating its customerServicePoints/staffServicePoints means
+      // agents already en route hold a stale target — re-route them the same way
+      // swapFixtureCategories() does below.
+      const directive = PHYSICAL_EXPANSION_DIRECTIVES[category];
+      if (directive && tier === MAX_ABSTRACT_SHELF_TIER) {
+        const fixture = fixtureForCategory(layout, category);
+        if (fixture) {
+          applyPhysicalExpansion(fixture, directive);
+          for (const customer of customers) {
+            if (customer.state === "walking_to_shelf" && customer.targetCategory === category) {
+              routeCustomerToCategory(customer, category);
+            }
+          }
+          for (const member of staff) {
+            if (member.state === "walking_to_shelf" && member.task === "replenishment" && member.targetCategory === category) {
+              routeStaff(member, fixture.staffServicePoints, "walking_to_shelf");
+            }
+          }
+        }
+      }
+
       return { ok: true, message: "売場を拡張しました" };
     },
 
