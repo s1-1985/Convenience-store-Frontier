@@ -36,6 +36,33 @@
 ディレクトリの中身と統合先の対応関係、および残りの未統合分の一覧は
 `docs/store-art-assets.md`と`HANDOFF.md`を参照すること。
 
+### `chatgpt-era-fixture-assets-v1/`
+
+2026-09-02にChatGPT側から受領した3つのZIP
+(`conveniencestorefrontiererafixtureassetspart1generalandera.zip`、
+`conveniencestorefrontiererafixtureassetspart2storeequipment.zip`、
+`conveniencestorefrontiererafixtureassetspart3productmodules.zip`)の中身
+一式。ファイル名は原本のまま(日本語)。
+
+- `01_general/` — 一般什器(常温棚バリエーション、冷蔵・冷凍・HOTディスプレイ集等)
+  6枚。特に`コンビニ什器の冷蔵_加熱ディスプレイ集.png`は冷凍・HOT什器の
+  バリエーションが豊富
+- `02_store_equipment/` — レジ・設備・店舗構造(什器什器什器・建具・タイル等)13枚
+- `03_era_variants/` — 年代別什器(レトロ・80年代・90年代・日本現代・近未来)6枚。
+  `docs/store-fixture-zones.md`5節の年代別ビジュアル差分に対応する素材だが、
+  **年代に応じて什器を切り替えるゲーティングの仕組み自体がまだ実装されていない**
+  ため、素材だけ先に揃った状態
+- `04_product_modules/` — 商品陳列モジュール4枚。組み込みには新しい
+  `StoreCategoryId`/`ProductDefinition`とバランス数値の決定を伴う
+- `README.txt`/`MANIFEST.txt` — 原本ZIP同梱の説明・ファイル一覧
+
+`data/assets/store/fixture-bases.png`の`frozen_case`/`hot_case`セル
+(什器の外側=温度帯シェル)は既にPR #57で本物のアートに差し替え済みで、
+2026-09-02に判明したコード側の不具合(`resolveFixtureArtIndex`が
+`FIXTURE_INDEX`にエントリの無いカテゴリを一律`undefined`にしていたため
+描画分岐へ到達していなかった)も修正済み。このディレクトリの素材は
+**まだ個体切り出し・アトラス統合には未着手**(`HANDOFF.md` 0-G参照)。
+
 ## 統合作業の進め方
 
 個体の切り出し・アトラスへの合成は、既存の「什器フェーズ1」「キャラフェーズ1」

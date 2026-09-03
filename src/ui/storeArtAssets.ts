@@ -146,6 +146,15 @@ export function resolveAgentFacing(agent: {
   return (["front", "left", "right", "back"] as const)[fallback] ?? "front";
 }
 
+// drawFixtureArtwork() only reads this return value to decide "is there art at all"
+// (undefined means "no, use the fallback rectangle"); the concrete number is never used
+// to pick a fixtures.png cell once isMerchandiseFixture routes to fixtureBases.png/
+// FIXTURE_BASE_INDEX instead (see drawFixtureArtwork's drawFixtureLayers()). So a
+// temperature-shell kind with real fixtureBases.png art (frozen_case/hot_case, see
+// FIXTURE_BASE_INDEX) but no fixtures.png cell of its own for this categoryId still
+// needs *some* defined value here to clear the early-return gate.
+const MERCHANDISE_ONLY_ART_SENTINEL = -1;
+
 export function resolveFixtureArtIndex(
   fixture: StoreFixture,
   snapshot?: StoreOperationsSnapshot,
@@ -157,7 +166,10 @@ export function resolveFixtureArtIndex(
   if (!fixture.categoryId) return undefined;
   const inventory = snapshot?.inventories[fixture.categoryId];
   if (fixture.kind === "shelf" && inventory && inventory.shelfUnits <= 0) return FIXTURE_INDEX.empty;
-  return FIXTURE_INDEX[fixture.categoryId];
+  const flatIndex = FIXTURE_INDEX[fixture.categoryId];
+  if (flatIndex !== undefined) return flatIndex;
+  if (FIXTURE_BASE_INDEX[fixture.kind] !== undefined) return MERCHANDISE_ONLY_ART_SENTINEL;
+  return undefined;
 }
 
 const MERCHANDISE_INDEX: Record<string, number> = {
@@ -272,11 +284,9 @@ export function drawFixtureArtwork(
       drawAtlasCell(context, assets.fixtures, index, 4, FIXTURE_CELL_WIDTH, FIXTURE_CELL_HEIGHT, target);
       return;
     }
-    // frozen_case/hot_case now have real fixture-bases.png cells (see
-    // docs/store-fixture-zones.md), but no StoreCategoryId targets them yet, so
-    // fixture.categoryId can only be set here for shelf/cold_case in the live game —
-    // this branch is exercised by tests but stays unreached in play until a category
-    // is assigned to one of these kinds.
+    // frozen_case/hot_case (ADR-0003/ADR-0004's "frozen"/"hot" categories) reach this
+    // branch too now that resolveFixtureArtIndex() lets them through — see
+    // docs/store-fixture-zones.md for the fixture-bases.png cell layout.
     const baseIndex = FIXTURE_BASE_INDEX[fixture.kind] ?? 0;
     drawAtlasCell(context, assets.fixtureBases, baseIndex, FIXTURE_BASE_COLUMNS, FIXTURE_CELL_WIDTH, FIXTURE_CELL_HEIGHT, target);
     const merchandiseIndex = MERCHANDISE_INDEX[fixture.categoryId];
