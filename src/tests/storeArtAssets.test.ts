@@ -91,7 +91,7 @@ describe("store art asset mapping", () => {
     expect(resolveFixtureArtIndex(hotCase, snapshot)).toBeDefined();
   });
 
-  it("keeps every walk frame at 0 when only one frame per direction exists (today's atlases)", () => {
+  it("keeps every walk frame at 0 when a role has only one frame per direction (e.g. staff.png today)", () => {
     for (const phase of [0, 0.1, 0.39, 0.4, 5, 1000]) {
       expect(resolveWalkFrame(phase, 1)).toBe(0);
     }
