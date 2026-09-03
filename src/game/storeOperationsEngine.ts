@@ -213,6 +213,15 @@ export interface StoreOperationsSnapshot {
   categoryTiers: Record<StoreCategoryId, number>;
   daysSincePolicyChange: number;
   unsyncedCapacityInvestment: number;
+  /**
+   * Per-category real stockout severity (0..1), same signal beginDay() takes as
+   * realStockoutSeverityByCategory — exposed here too so the rendering layer
+   * (resolveFixtureStockState in src/ui/storeArtAssets.ts) can lean a fixture's
+   * merchandise display toward "depleted" for categories genuinely short in the
+   * shared numeric Simulation, without touching this engine's own shelfUnits (see
+   * that function's doc comment for why the bias stops at the art layer).
+   */
+  stockoutSeverityByCategory: Partial<Record<StoreCategoryId, number>>;
 }
 
 export interface SerializedStoreOperations extends StoreOperationsSnapshot {
@@ -1502,6 +1511,7 @@ export function createStoreOperationsEngine(
         categoryTiers: { ...categoryTiers },
         daysSincePolicyChange,
         unsyncedCapacityInvestment,
+        stockoutSeverityByCategory: { ...stockoutSeverityByCategory },
       };
     },
 

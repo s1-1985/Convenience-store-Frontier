@@ -52,6 +52,48 @@ describe("store art asset mapping", () => {
     expect(resolveFixtureStockState(fixture, snapshot)).toBe("empty");
   });
 
+  it("leaves the merchandise fill state unchanged when real stockout severity is absent or zero", () => {
+    const fixture = createDefaultStoreLayout().fixtures.find((candidate) => candidate.id === "snacks")!;
+    const snapshot = createStoreOperationsEngine(1977).getSnapshot();
+    snapshot.inventories.snacks.shelfUnits = snapshot.inventories.snacks.shelfCapacity;
+    expect(snapshot.stockoutSeverityByCategory).toEqual({});
+    expect(resolveFixtureStockState(fixture, snapshot)).toBe("full");
+    snapshot.stockoutSeverityByCategory.snacks = 0;
+    expect(resolveFixtureStockState(fixture, snapshot)).toBe("full");
+  });
+
+  it("pulls the merchandise fill state toward depleted as real stockout severity rises", () => {
+    // Half-capacity shelf (ratio 0.5, comfortably "normal" on its own). REAL_STOCKOUT_
+    // DISPLAY_BIAS is 0.6 (src/ui/storeArtAssets.ts), so severity 0.6 scales the ratio
+    // to 0.5 * (1 - 0.6*0.6) = 0.32, crossing below the 0.34 "low" threshold.
+    const fixture = createDefaultStoreLayout().fixtures.find((candidate) => candidate.id === "snacks")!;
+    const snapshot = createStoreOperationsEngine(1977).getSnapshot();
+    snapshot.inventories.snacks.shelfUnits = Math.round(snapshot.inventories.snacks.shelfCapacity / 2);
+    expect(resolveFixtureStockState(fixture, snapshot)).toBe("normal");
+    snapshot.stockoutSeverityByCategory.snacks = 0.6;
+    expect(resolveFixtureStockState(fixture, snapshot)).toBe("low");
+  });
+
+  it("clamps out-of-range severity values instead of producing a negative or inflated ratio", () => {
+    // Half-capacity shelf: unclamped severity would push the ratio outside [0,1] and
+    // flip the resulting state, so this only passes if resolveFixtureStockState
+    // actually clamps severity to [0,1] before applying it (rather than trusting the
+    // caller, since realStockoutSeverityByCategory() already clamps but this should
+    // not rely on that alone).
+    const fixture = createDefaultStoreLayout().fixtures.find((candidate) => candidate.id === "snacks")!;
+    const snapshot = createStoreOperationsEngine(1977).getSnapshot();
+    const inventory = snapshot.inventories.snacks;
+    inventory.shelfUnits = Math.round(inventory.shelfCapacity / 2);
+    snapshot.stockoutSeverityByCategory.snacks = 5; // out of the documented 0..1 range
+    // Clamped to 1: ratio = 0.5 * (1 - 1*0.6) = 0.2 -> "low". Unclamped it would be
+    // 0.5 * (1 - 5*0.6) = -1 -> "empty", so this also guards against that regression.
+    expect(resolveFixtureStockState(fixture, snapshot)).toBe("low");
+    snapshot.stockoutSeverityByCategory.snacks = -3;
+    // Clamped to 0: ratio stays 0.5 -> "normal". Unclamped it would inflate to
+    // 0.5 * (1 - (-3)*0.6) = 1.4 -> "full", so this guards against that direction too.
+    expect(resolveFixtureStockState(fixture, snapshot)).toBe("normal");
+  });
+
   it("leaves frozen_case/hot_case fixtures without art undrawn (fallback rectangle applies)", () => {
     // These synthetic fixtures have no categoryId, so resolveFixtureArtIndex returns
     // undefined regardless of kind (both kinds now have a StoreCategoryId targeting

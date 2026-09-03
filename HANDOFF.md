@@ -545,6 +545,44 @@ student_high_female)の計8行。
 `cohort_high_school_student`)で重み付けされた行のため、0-Hの新規4行(未モデル化の
 一律フレーバー枠のみ)より実際のプレイで目にする頻度が高い。
 
+## 0-L. 続く同日セッション(2026-09-03、什器棚卸しMD出力・実欠品シビアリティの什器商品絵柄への反映)
+
+0-Kのマージ後、ユーザーから2件の指示が続いた。
+
+**(1) 什器アセット棚卸し監査**: 「正式採用済みの什器を、今後の方向差分アセット
+作成の準備として棚卸ししたい」という詳細指定(A01-I05の45項目チェックリスト、
+5列テーブル形式、◎○△×要確認の凡例、summary 1-6節)に基づき、`data/assets/store/`
+と`art-source/`配下の実ファイルをコード(非公認の`*-manifest.json`ではなく
+`storeArtAssets.ts`内の`FIXTURE_BASE_INDEX`等の定数)と突き合わせて監査した。
+新規画像の作成・既存画像の書き換えは一切行わないという制約付き。結果は
+`docs/handoffs/2026-09-03-fixture-inventory-audit.md`へMDとして出力し(ユーザーが
+ChatGPTへ結果を渡す用途)、`SendUserFile`で納品した。45項目中、正式採用済みは
+8件のみ、候補素材が一切無いものが15件、年代差分に対応する仕組み自体がコードに
+存在しないことが判明した。このコミットは当時まだオープンだったPR #78のブランチへ
+乗った(別PRへ分けたい場合はユーザーへ確認要、と当時の応答で明示済み)。
+
+**(2) 実欠品シビアリティの什器商品絵柄への反映**: 「裏でGPTが画像生成している間、
+システム面を進めておいて」との指示を受け、`docs/visual-numeric-engine-integration.md`
+フェーズ2の残課題のうち、AskUserQuestionでユーザーが選んだ「商品単位の在庫欠品を
+Canvasに直接反映」に着手した。実装中に「什器の商品絵柄・品切れ警告バッジ・
+フッター在庫バーの3箇所が同じ`shelfUnits`比率を独立に参照しており、バイアスを
+1箇所だけに適用すると3箇所間で表示が食い違う」という設計上の分岐点を発見し、
+再度AskUserQuestionでユーザーに確認。「什器の商品絵柄のみ(推奨)」が選ばれ、
+その通り実装した。
+
+- `StoreOperationsSnapshot`(`storeOperationsEngine.ts`)に
+  `stockoutSeverityByCategory`を追加し公開(セーブへは含まれるが復元時は
+  読み戻さず、フェーズ2aと同じく毎日`beginDay()`で再計算される派生信号のまま)
+- `resolveFixtureStockState()`(`storeArtAssets.ts`)が、実欠品シビアリティ
+  (0〜1にクランプ)で`shelfUnits/shelfCapacity`比率を最大60%
+  (`REAL_STOCKOUT_DISPLAY_BIAS`)減衰させるよう変更。品切れ警告バッジと
+  フッター在庫バーは意図的に未変更のまま
+- `src/tests/storeArtAssets.test.ts`に3本追加(計13本、全体184件全通過)
+- `npx tsc --noEmit -p .`・`npx vitest run`・`npm run balance:ci`
+  (この変更はCanvas描画層のみのため数値的に変更前と完全一致)・Playwrightで検証
+
+詳細は`docs/visual-numeric-engine-integration.md`の「フェーズ2c」を参照。
+
 ## 1. このセッションでやったこと(時系列サマリ)
 
 ### 1.1 前半: バグ修正・客層拡張(PR #52, #53)
@@ -750,7 +788,10 @@ PR #57時点で実アートあり、`resolveFixtureArtIndex`のバグ修正(0-G)
 
 - 棚面積(`categoryArea`点数配分)とタイル什器レイアウトの統合(什器の物理配置
   そのものの統合。点数の同期自体は2.6参照、解消済み)
-- 商品単位とカテゴリ単位の完全統合(在庫欠品表示を含む)
+- 商品単位とカテゴリ単位の完全統合(在庫欠品表示を含む) — ~~什器の商品絵柄への
+  表示バイアスは着手済み(0-L・フェーズ2c参照)~~。ただし品切れ警告バッジ・
+  フッター在庫バーの表示、および`shelfUnits`自体の商品単位バッチとの統合は
+  引き続き未着手
 - スロット単位で来店客1人1人を数値エンジンと厳密に対応させる演出
 - ~~`set_category_area`/`set_task_priorities`をCanvas側から即時反映すること~~
   → 2.6参照、解消済み
