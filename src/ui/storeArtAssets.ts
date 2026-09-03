@@ -180,7 +180,10 @@ const MERCHANDISE_INDEX: Record<string, number> = {
   snacks: 4,
   instant: 5,
   daily_goods: 6,
+  frozen: 7,
+  hot: 8,
 };
+const MERCHANDISE_COLUMNS = 9;
 
 export type FixtureStockState = "empty" | "low" | "normal" | "full";
 
@@ -293,7 +296,7 @@ export function drawFixtureArtwork(
     const state = resolveFixtureStockState(fixture, snapshot);
     const fillRatio = state === "full" ? 1 : state === "normal" ? 0.67 : state === "low" ? 0.34 : 0;
     if (merchandiseIndex === undefined || fillRatio === 0) return;
-    const sourceX = (merchandiseIndex % 7) * FIXTURE_CELL_WIDTH;
+    const sourceX = (merchandiseIndex % MERCHANDISE_COLUMNS) * FIXTURE_CELL_WIDTH;
     const sourceWidth = FIXTURE_CELL_WIDTH * fillRatio;
     context.drawImage(
       assets.merchandise,
@@ -436,7 +439,7 @@ export function drawUiIcon(
 export const STORE_ART_ATLAS_SPEC = {
   fixtures: { width: 1536, height: 768, columns: 4, rows: 3 },
   fixtureBases: { width: 1536, height: 256, columns: 4, rows: 1 },
-  merchandise: { width: 2688, height: 256, columns: 7, rows: 1 },
+  merchandise: { width: 3456, height: 256, columns: 9, rows: 1 },
   staff: { width: 768, height: 768, columns: 4, rows: 3 },
   customers: { width: 1920, height: 7920, columns: 12, rows: 36 },
   icons: { width: 1024, height: 128, columns: 8, rows: 1 },

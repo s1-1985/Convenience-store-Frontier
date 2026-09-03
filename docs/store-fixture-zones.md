@@ -141,9 +141,16 @@ snacks/instant/daily_goods/magazines)もすべてこの2種類のどちらかに
   (`fixtureBases.png`を使う分岐へ一度も到達していなかった)。
   `FIXTURE_BASE_INDEX`にエントリがある場合は`FIXTURE_INDEX`に無くても通す
   よう修正し、什器シェル自体は本物のアートで描画されるようになった。
-- ChatGPT側で冷凍食品・ホットスナックカテゴリの**陳列商品**アート(`merchandise.png`
+- ~~ChatGPT側で冷凍食品・ホットスナックカテゴリの**陳列商品**アート(`merchandise.png`
   への追加コマ、什器の中に並ぶ商品の見た目)が届いた後の`MERCHANDISE_INDEX`
-  (`src/ui/storeArtAssets.ts`)への`"frozen"`/`"hot"`追記。什器シェル自体は
-  上記の通り本物のアートになったが、中の商品の描画(`fillRatio`に応じた陳列量表現)
-  は届くまで表示されないまま(`merchandiseIndex === undefined`の間は
-  スキップされる、什器が空に見える)
+  (`src/ui/storeArtAssets.ts`)への`"frozen"`/`"hot"`追記~~ → 2026-09-03、解消済み。
+  `art-source/chatgpt-adopted-v1/product_contents/`(2026-09-01受領、什器と商品が
+  正しく分離されている素材)から冷凍食品(パッケージ入り冷凍食品)・中華まんの
+  アイコンを切り出し、`merchandise.png`を7列→9列(index 7=frozen、8=hot)へ拡張した。
+  `MERCHANDISE_INDEX`に`frozen: 7`・`hot: 8`を追加し、`drawFixtureArtwork`内の
+  横方向クロップ計算にハードコードされていた列数(`% 7`)も`MERCHANDISE_COLUMNS`
+  定数(9)経由に修正した(9列化に伴う既知の落とし穴として対応)。両カテゴリとも
+  什器シェルの実際の陳列面(冷凍=ワイヤーバスケット部分、HOT=上下2段のトレイ部分)に
+  位置を合わせてアイコンを配置している。おでんの絵は同素材内に見つからず、
+  中華まん8種のみで代表させている(1カテゴリの陳列アートは複数SKUの網羅ではなく
+  代表的な見た目という既存の粒度に合わせた判断)。

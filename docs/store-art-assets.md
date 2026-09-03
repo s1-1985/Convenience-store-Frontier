@@ -7,8 +7,8 @@
 | ファイル | 内容 | セル構成 |
 |---|---|---|
 | `fixtures.png` | 店内什器12種(entrance/drinks/dessert/ready_meal/magazines/register/snacks/instant/daily_goods/waste/backroom/empty) | 4列×3行、384×256px/セル |
-| `fixture-bases.png` | 空の什器本体2種(常温ゴンドラ/冷蔵ケース) | 2列×1行、384×256px/セル |
-| `merchandise.png` | 商品オーバーレイ7種(drinks/dessert/ready_meal/magazines/snacks/instant/daily_goods) | 7列×1行、384×256px/セル |
+| `fixture-bases.png` | 空の什器本体4種(常温ゴンドラ/冷蔵ケース/冷凍ケース/HOTケース) | 4列×1行、384×256px/セル |
+| `merchandise.png` | 商品オーバーレイ9種(drinks/dessert/ready_meal/magazines/snacks/instant/daily_goods/frozen/hot) | 9列×1行、384×256px/セル |
 | `staff.png` | レジ・補充・清掃の店員、前後左右 | 4列×3行、192×256px/セル |
 | `customers.png` | 客36種、前後左右×3コマ | 12列(4方向×3コマ)×36行、160×220px/セル |
 | `icons.png` | 時刻・カレンダー・客数・在庫箱・売上グラフ・硬貨(売上)・財布(所持金)・天気 | 8列×1行、128×128px/セル |
@@ -34,6 +34,13 @@
 `empty`の4状態へ変換する。商品レイヤーだけを横方向に減らすため、在庫が
 なくなっても空の什器はその場に残る。カテゴリを変更するときも什器画像を
 作り直す必要はなく、商品レイヤーのセルを差し替える。
+
+`frozen`(index 7)・`hot`(index 8、2026-09-03追加)の2セルは、`shelf`/
+`cold_case`系のセルのようにセル全体へ均等配置ではなく、対応する
+`fixture-bases.png`側の什器(チェスト式冷凍庫・光る温蔵ケース)の実際の
+陳列面(ワイヤーバスケット部分/トレイ部分)の位置に合わせてアイコンを
+配置してある。什器の見た目が変わるとこの位置合わせも作り直しが必要になる点に
+注意。
 
 ## 客層のバリエーション
 
