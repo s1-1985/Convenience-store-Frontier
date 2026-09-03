@@ -16,18 +16,15 @@ describe("store art asset mapping", () => {
     }
   });
 
-  it("maps every fixture in the default store to artwork, except frozen/hot (no merchandise art yet, ADR-0003/ADR-0004)", () => {
+  it("maps every fixture in the default store to artwork, including frozen/hot's fixture-bases.png shells", () => {
+    // frozen_case/hot_case (ADR-0003/ADR-0004) have real fixture-bases.png cells
+    // (see docs/store-fixture-zones.md) even though no merchandise.png overlay art
+    // exists for either category yet — resolveFixtureArtIndex now returns a defined
+    // (if fixtures.png-meaningless) value for them so drawFixtureArtwork reaches the
+    // fixtureBases.png branch instead of falling back to the plain rectangle.
     const layout = createDefaultStoreLayout();
     const snapshot = createStoreOperationsEngine(1977).getSnapshot();
     for (const fixture of layout.fixtures) {
-      if (fixture.categoryId === "frozen" || fixture.categoryId === "hot") {
-        // ADR-0003/ADR-0004: frozen_case/hot_case have real fixture-bases.png cells,
-        // but no merchandise.png overlay art exists for either category yet, so
-        // resolveFixtureArtIndex intentionally falls back to undefined here (the
-        // caller then draws the fallback rectangle) until ChatGPT supplies art.
-        expect(resolveFixtureArtIndex(fixture, snapshot)).toBeUndefined();
-        continue;
-      }
       expect(resolveFixtureArtIndex(fixture, snapshot)).toBeDefined();
     }
   });
@@ -65,6 +62,33 @@ describe("store art asset mapping", () => {
     const hotCase = { id: "hot-test", kind: "hot_case" as const, tiles: [], customerServicePoints: [], staffServicePoints: [] };
     expect(resolveFixtureArtIndex(frozenCase, snapshot)).toBeUndefined();
     expect(resolveFixtureArtIndex(hotCase, snapshot)).toBeUndefined();
+  });
+
+  it("resolves a defined index for a frozen_case/hot_case fixture that does have a categoryId", () => {
+    // Regression test for the gap fixed alongside ADR-0006: resolveFixtureArtIndex used
+    // to fall through to `FIXTURE_INDEX[fixture.categoryId]` (fixtures.png, which has no
+    // "frozen"/"hot" entry) and return undefined, so drawFixtureArtwork never reached
+    // the fixtureBases.png branch even though real frozen_case/hot_case shell art has
+    // existed there since PR #57.
+    const snapshot = createStoreOperationsEngine(1977).getSnapshot();
+    const frozenCase = {
+      id: "frozen-test",
+      kind: "frozen_case" as const,
+      categoryId: "frozen" as const,
+      tiles: [],
+      customerServicePoints: [],
+      staffServicePoints: [],
+    };
+    const hotCase = {
+      id: "hot-test",
+      kind: "hot_case" as const,
+      categoryId: "hot" as const,
+      tiles: [],
+      customerServicePoints: [],
+      staffServicePoints: [],
+    };
+    expect(resolveFixtureArtIndex(frozenCase, snapshot)).toBeDefined();
+    expect(resolveFixtureArtIndex(hotCase, snapshot)).toBeDefined();
   });
 
   it("keeps every walk frame at 0 when only one frame per direction exists (today's atlases)", () => {

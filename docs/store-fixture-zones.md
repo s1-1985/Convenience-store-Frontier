@@ -131,7 +131,19 @@ snacks/instant/daily_goods/magazines)もすべてこの2種類のどちらかに
   `design/DECISIONS/ADR-0004-add-hot-snack-category.md`で決定・実装済み。
   `category_hot_snack`(おでん・中華まん)を追加し、`StoreCategoryId`の`"hot"`を
   デフォルトレイアウトの`hot_case`什器1つへ配線した。
-- ChatGPT側で冷凍食品・ホットスナックカテゴリの陳列商品アート(`merchandise.png`への
-  追加コマ)が届いた後の`FIXTURE_INDEX`/`MERCHANDISE_INDEX`(`src/ui/storeArtAssets.ts`)への
-  `"frozen"`/`"hot"`追記。届くまでは両什器ともフォールバック矩形描画のまま
-  (ADR-0003 Decision 5、ADR-0004 Decision 5参照)
+- ~~`frozen_case`/`hot_case`什器そのもの(温度帯シェル)の見た目がフォールバック
+  矩形描画のまま~~ → 2026-09-02、コード側の不具合と判明し修正済み。
+  `fixture-bases.png`にはPR #57で追加済みの本物の什器シェルアート(冷凍=青い
+  チェスト式冷凍庫、HOT=光る温蔵ケース)が既にあったが、`resolveFixtureArtIndex`
+  (`src/ui/storeArtAssets.ts`)が`FIXTURE_INDEX`(`fixtures.png`用、frozen/hotの
+  エントリが無い)だけを見て`undefined`を返していたため、`drawFixtureArtwork`が
+  常に早期リターンしフォールバック矩形描画に落ちていた
+  (`fixtureBases.png`を使う分岐へ一度も到達していなかった)。
+  `FIXTURE_BASE_INDEX`にエントリがある場合は`FIXTURE_INDEX`に無くても通す
+  よう修正し、什器シェル自体は本物のアートで描画されるようになった。
+- ChatGPT側で冷凍食品・ホットスナックカテゴリの**陳列商品**アート(`merchandise.png`
+  への追加コマ、什器の中に並ぶ商品の見た目)が届いた後の`MERCHANDISE_INDEX`
+  (`src/ui/storeArtAssets.ts`)への`"frozen"`/`"hot"`追記。什器シェル自体は
+  上記の通り本物のアートになったが、中の商品の描画(`fillRatio`に応じた陳列量表現)
+  は届くまで表示されないまま(`merchandiseIndex === undefined`の間は
+  スキップされる、什器が空に見える)
