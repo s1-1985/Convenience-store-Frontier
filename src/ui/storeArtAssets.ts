@@ -187,13 +187,28 @@ const MERCHANDISE_COLUMNS = 9;
 
 export type FixtureStockState = "empty" | "low" | "normal" | "full";
 
+// How far a category's real stockout severity (0..1, snapshot.stockoutSeverityByCategory,
+// see StoreOperationsEngine's beginDay()) pulls the merchandise-art fill ratio down
+// below what this engine's own shelfUnits/shelfCapacity would show alone. Deliberately
+// applied only here (the fixture's merchandise-art layer) and not to the "品切れ/残り少"
+// warning badge or the footer inventory bar's ratio/text (both drawn from raw
+// inventory.shelfUnits in storeGameRuntime.ts) — those stay driven purely by this
+// engine's own visible "customer buys -> shelfUnits drops" simulation, so the numbers a
+// player can read stay exactly cause-and-effect with what happened on screen. The
+// merchandise art is comparatively ambient (nobody counts pixels of stock), so it can
+// afford to lean toward "this category is genuinely struggling in the real economy"
+// without breaking that precise feedback loop. Severity 0 leaves the ratio unchanged.
+const REAL_STOCKOUT_DISPLAY_BIAS = 0.6;
+
 export function resolveFixtureStockState(
   fixture: StoreFixture,
   snapshot: StoreOperationsSnapshot,
 ): FixtureStockState | undefined {
   if (!fixture.categoryId) return undefined;
   const inventory = snapshot.inventories[fixture.categoryId];
-  const ratio = inventory.shelfCapacity > 0 ? inventory.shelfUnits / inventory.shelfCapacity : 0;
+  const rawRatio = inventory.shelfCapacity > 0 ? inventory.shelfUnits / inventory.shelfCapacity : 0;
+  const severity = Math.min(1, Math.max(0, snapshot.stockoutSeverityByCategory[fixture.categoryId] ?? 0));
+  const ratio = rawRatio * (1 - severity * REAL_STOCKOUT_DISPLAY_BIAS);
   if (ratio <= 0) return "empty";
   if (ratio < 0.34) return "low";
   if (ratio < 0.67) return "normal";
