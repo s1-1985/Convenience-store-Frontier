@@ -85,7 +85,7 @@ const FACING_COLUMN: Record<AgentFacing, number> = {
 // spawnCustomer, which prefers the cohort-weighted archetype pools built in
 // storeGameRuntime.ts (see COHORT_ARCHETYPE_ROWS there) when scenario data is
 // loaded, and otherwise falls back to a uniform pick across all rows.
-const CUSTOMER_ROWS = Array.from({ length: 32 }, (_, index) => index);
+const CUSTOMER_ROWS = Array.from({ length: 36 }, (_, index) => index);
 
 const ASSET_URLS = {
   fixtures: "/assets/store/fixtures.png",
@@ -342,14 +342,17 @@ export function drawFixtureArtwork(
   };
 }
 
-// Walk-cycle frames available per facing direction in customers.png/staff.png today.
-// Both atlases are single-frame-per-facing (STORE_ART_ATLAS_SPEC: 4 columns = facing
-// only, no frame dimension yet — see docs/store-art-assets.md). Bump these and extend
-// the atlas layout (row*(4*N) + facingColumn*N + frame, N new columns per facing) once
-// multi-frame walk-cycle art is integrated; resolveWalkFrame() and the cell math in
+// Walk-cycle frames available per facing direction in customers.png/staff.png.
+// customers.png rows 32-35 (see data/assets/store/customers-manifest.json) have real
+// 3-frame walk cycles integrated from the ChatGPT-delivered walking sheet; rows 0-31
+// repeat their single original frame across all 3 columns, so they render identically
+// to before (no motion) but share the same 12-column-per-facing atlas layout. staff.png
+// has no multi-frame source art yet, so it stays single-frame — bump
+// STAFF_FRAMES_PER_DIRECTION and extend the atlas (row*(4*N) + facingColumn*N + frame,
+// N new columns per facing) once it does; resolveWalkFrame() and the cell math in
 // drawAgentArtwork() below are already frame-aware, so no other code change would be
 // needed at that point.
-const CUSTOMER_FRAMES_PER_DIRECTION = 1;
+const CUSTOMER_FRAMES_PER_DIRECTION = 3;
 const STAFF_FRAMES_PER_DIRECTION = 1;
 
 // Tile-distance covered per walk-cycle frame advance. Only affects the drawn frame once
@@ -435,6 +438,6 @@ export const STORE_ART_ATLAS_SPEC = {
   fixtureBases: { width: 1536, height: 256, columns: 4, rows: 1 },
   merchandise: { width: 2688, height: 256, columns: 7, rows: 1 },
   staff: { width: 768, height: 768, columns: 4, rows: 3 },
-  customers: { width: 640, height: 7040, columns: 4, rows: 32 },
+  customers: { width: 1920, height: 7920, columns: 12, rows: 36 },
   icons: { width: 1024, height: 128, columns: 8, rows: 1 },
 } as const;

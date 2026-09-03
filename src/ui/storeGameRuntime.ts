@@ -147,9 +147,10 @@ function timeBlockForHour(scenario: ScenarioBundle, hour: number): TimeBlockId {
 
 // Row indices from data/assets/store/customers-manifest.json, grouped by which of the
 // six customer_cohorts.json cohorts each archetype most plausibly represents. Rows not
-// listed here (student_university_male/female, middle_male/female, delinquent — rows
-// 5, 10, 11, 13, 19) have no corresponding CohortDefinition yet: their shopping
-// behavior and real appearance probability are not modeled. See docs/store-art-assets.md.
+// listed here (student_university_male/female, middle_male/female, delinquent, and the
+// walking-sheet rows 32-35 — rows 5, 10, 11, 13, 19, 32-35) have no corresponding
+// CohortDefinition yet: their shopping behavior and real appearance probability are not
+// modeled. See docs/store-art-assets.md.
 const COHORT_ARCHETYPE_ROWS: Record<string, number[]> = {
   cohort_commuter_worker: [0, 1, 14, 15, 16, 17],
   cohort_lunch_worker: [0, 1, 14, 15, 16, 17],
@@ -158,7 +159,7 @@ const COHORT_ARCHETYPE_ROWS: Record<string, number[]> = {
   cohort_elderly: [3, 18],
   cohort_night_worker: [20, 21, 22, 23],
 };
-const ALL_CUSTOMER_ROWS = Array.from({ length: 32 }, (_, index) => index);
+const ALL_CUSTOMER_ROWS = Array.from({ length: 36 }, (_, index) => index);
 // Small flat slice of arrival weight reserved for archetypes with no modeled cohort
 // above, so those already-produced art assets still appear in play rather than never
 // being drawn. Not a claim about their real-world share of customers.
