@@ -715,6 +715,13 @@ function drawCustomer(
   let bubble: string | undefined;
   if (customer.regular) bubble = "★";
   if (customer.state === "browsing" && customer.targetCategory) bubble = CATEGORY_LABELS[customer.targetCategory].slice(0, 2);
+  // docs/backlog.md Milestone 7 P2「時計を見る客」: patienceRemainingSeconds is already
+  // tracked per queueing customer (storeOperationsEngine.ts counts it down while
+  // queueing and calls routeCustomerToExit(customer, "queue_abandonment") once it runs
+  // out) — this graduates the existing single "!" threshold into two visible steps, so
+  // rising impatience is legible before a customer actually reaches the point of leaving
+  // (PRINCIPLES.md「2. 情報は徐々に見えるようになる」).
+  if (customer.state === "queueing" && customer.patienceRemainingSeconds < 10) bubble = "⏰";
   if (customer.state === "queueing" && customer.patienceRemainingSeconds < 6) bubble = "!";
   if (customer.state === "leaving" && customer.reason === "stockout") bubble = "品切?";
   if (customer.state === "leaving" && customer.reason === "price") bubble = "高い…";
