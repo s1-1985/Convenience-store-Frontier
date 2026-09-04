@@ -1,4 +1,4 @@
-# 見た目の店内Canvasと数値エンジンの統合(フェーズ1)
+# 見た目の店内Canvasと数値エンジンの統合(フェーズ1〜2g)
 
 ## 背景
 
@@ -368,6 +368,36 @@ categoryAreaへ反映する」という本格的な双方向統合は、可変�
   今回判断していない
 - `detectStoreIncidents()`側のリアルタイム警告には原因階層を追加していない
   (`buildDashboardAlerts()`側のみ)
+
+## フェーズ2g: 当日のライブな天候をCanvas上に反映(2026-09-04)
+
+「見た目・演出が単調」への対応を「続けて」の指示で進める中、`weather:
+"clear"|"rain"`が`demand.ts`の`weatherDemandMultiplier()`により来店需要へ
+実際に影響する値であるにもかかわらず、`SimulationSnapshot`に当日のライブな
+天候が公開されておらず、Canvas・数値ダッシュボード双方とも前日確定分の
+天候(`DailyReport.weather`、main.ts「直近日報：晴/雨」)しか参照できていない
+ことが判明した。数値・バランス計算には触れず、既存の需要計算式が既に使って
+いる値を公開・表示するだけの変更として実装した。
+
+- `SimulationSnapshot`(`simulation.ts`)に`weather: Weather`を追加。
+  `rollWeather()`で日替わりに再ロールされる既存のクロージャ変数を
+  `getSnapshot()`でそのまま公開するだけ
+- `storeGameRuntime.ts`に`liveWeather()`を追加。HUDの「天気」カードを
+  前日分の`weather-label`テキストから当日実況の天候表示に変更
+- 雨の日は`drawRainOverlay()`が店内フロアへ薄い青灰色のティントと、
+  `timestamp`基準でループする斜めの雨筋を描画する(純粋なCanvas描画層の
+  追加。店員・客・什器等のデータモデルには触れない)
+- `npx tsc --noEmit -p .`・`npx vitest run`(188件全通過、変化なし)・
+  `npm run balance:ci`(変更前と数値的に完全一致)で検証
+- Playwright: seed 1977で3日目が雨と判明したため実際に3日目まで進行させ、
+  ティントと雨筋がCanvas上に描画されること、会計演出・警告バナー等の
+  既存演出と重ねて表示しても崩れないことをスクリーンショットで確認
+
+### 残課題(未着手のまま)
+
+- 天候による視覚効果は雨のみ(晴れの日に対応する演出は特に追加していない)
+- 雨天時の来店客の行動(傘を差す、走るなど)は変更していない。純粋な
+  背景演出のみ
 
 ## 検証方法(実施済み)
 
