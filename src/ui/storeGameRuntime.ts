@@ -424,10 +424,20 @@ function isPlaying(): boolean {
   return optional<HTMLButtonElement>("play-button")?.textContent?.includes("停止") ?? false;
 }
 
+// 「4倍/20倍」ボタンを選んでもCanvas上のキャラクターの歩行速度がほとんど変わらない
+// (HANDOFF.md §0-W参照、ユーザー報告)という問題があった。来店客のスポーン頻度は
+// 実Simulationの実際の加速率(simMinutesElapsedThisFrame、main.tsのSimClockが
+// そのまま反映)に従っていて正しく速くなっていたが、ここ(engine.advance()へ渡す
+// deltaSecondsの倍率、つまり歩行・接客・補充など見た目の全アニメーション速度)は
+// ラベルよりずっと控えめな値(旧: 20倍→3.2倍・4倍→1.9倍)に据え置かれており、
+// 「行列に並ぶ客だけ増えるのにキャラは同じ速度でしか動かない」という体感の
+// 不一致を生んでいた。ラベルの倍率そのものにはしない(20倍そのままだと歩行が
+// 一瞬でテレポートしたように見え、逆に何が起きているか読み取れなくなるため)が、
+// 以前よりはっきり体感できる倍率まで引き上げる。
 function visualTimeScale(): number {
   const speed = optional<HTMLSelectElement>("speed-select")?.value ?? "1";
-  if (speed === "20") return 3.2;
-  if (speed === "4") return 1.9;
+  if (speed === "20") return 8;
+  if (speed === "4") return 3.2;
   return 1;
 }
 
