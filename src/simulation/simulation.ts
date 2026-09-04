@@ -87,6 +87,15 @@ export interface SimulationSnapshot {
    * representative customers to show without re-deriving demand itself.
    */
   lastSlotPlayerVisits: number;
+  /**
+   * Today's already-rolled weather (rollWeather() in demand.ts, held in the day-loop
+   * closure below and re-rolled once per day boundary). Distinct from DailyReport.weather,
+   * which is only available for a day once it has *finished* — this lets a presentation
+   * layer (src/ui/storeGameRuntime.ts) show and react to today's weather live, since
+   * weatherDemandMultiplier() already makes it a real (if currently invisible) driver of
+   * today's foot traffic.
+   */
+  weather: Weather;
 }
 
 interface CohortSlotRecord {
@@ -545,6 +554,7 @@ export function createSimulation(
         },
         habits: habits.getSnapshot(),
         lastSlotPlayerVisits,
+        weather,
       };
     },
 
