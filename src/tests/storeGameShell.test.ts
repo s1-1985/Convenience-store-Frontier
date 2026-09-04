@@ -37,4 +37,10 @@ describe("store game shell controls", () => {
     expect(source).toContain("setCategoryPrice");
     expect(source).toContain("product-price-controls");
   });
+
+  it("plays an entrance ripple for customers newly spawned this frame (docs/backlog.md Milestone 7 P2)", () => {
+    expect(source).toContain("function updateEntranceRipples(");
+    expect(source).toContain("function drawEntranceRipple(");
+    expect(source).toContain("newlyArrivedCustomerIds(knownCustomerIds, snapshot.customers)");
+  });
 });
