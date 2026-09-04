@@ -43,4 +43,11 @@ describe("store game shell controls", () => {
     expect(source).toContain("function drawEntranceRipple(");
     expect(source).toContain("newlyArrivedCustomerIds(knownCustomerIds, snapshot.customers)");
   });
+
+  it("lets the player dismiss the live-incident and day-alert banners instead of them staying on screen forever", () => {
+    expect(source).toContain("data-dismiss-live-incident");
+    expect(source).toContain("data-dismiss-day-alert");
+    expect(source).toContain("dismissedLiveIncidentId = detectStoreIncidents(snapshot)[0]?.id");
+    expect(source).toContain("dismissedDayAlertDay = latestDayAlert()?.day");
+  });
 });

@@ -75,7 +75,7 @@ body.store-game-mode #app {
   align-items: center;
   gap: 9px;
   max-width: min(620px, 72vw);
-  padding: 7px 13px;
+  padding: 7px 34px 7px 13px;
   transform: translateX(-50%);
   border: 2px solid #e4ad3e;
   border-radius: 8px;
@@ -89,6 +89,28 @@ body.store-game-mode #app {
 .live-incident[data-severity="critical"] { border-color: #fff1aa; background: rgba(150, 35, 30, .97); }
 .live-incident strong { white-space: nowrap; font-size: 12px; }
 .live-incident span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+
+/* .live-incident itself is pointer-events:none so it never blocks taps on the store
+   underneath — this button opts back in so the player has a way to dismiss a banner
+   that (by design, see renderLiveIncident()/renderDayAlert()) otherwise stays on screen
+   for as long as the underlying problem does. Absolutely positioned (rather than
+   flex order + margin-left:auto) so it lands in the same top-right corner regardless
+   of .live-incident's row layout vs. .day-alert's column layout. */
+.banner-dismiss {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  pointer-events: auto;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, .3);
+  color: inherit;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
 
 /* Stacks below .live-incident (the live per-frame incident banner) rather than
    overlapping it — both can be visible at once (a moment-to-moment queue/litter
