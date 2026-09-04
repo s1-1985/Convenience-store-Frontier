@@ -124,4 +124,54 @@ describe("basic UI presentation", () => {
       expect.arrayContaining([expect.objectContaining({ id: "stable" })]),
     );
   });
+
+  it("points a queue alert's cause chain at the register backlog when one exists", () => {
+    const alerts = buildDashboardAlerts(
+      report({
+        abandonedCustomers: 12,
+        operationBacklogByTask: {
+          register: 30,
+          replenishment: 0,
+          cleaning: 0,
+          delivery_receiving: 0,
+          admin: 0,
+        },
+      }),
+    );
+    const queueAlert = alerts.find((alert) => alert.id === "queue-critical");
+    expect(queueAlert?.causeChain).toEqual(["レジ業務の未処理が蓄積している(30点)"]);
+  });
+
+  it("distinguishes an empty backroom from a replenishment lag in the inventory alert's cause chain", () => {
+    const emptyBackroom = buildDashboardAlerts(
+      report({ stockoutUnitsByProduct: { bento: 50 }, backroomInventoryUnitsEnd: 5 }),
+    );
+    expect(
+      emptyBackroom.find((alert) => alert.id === "inventory-critical")?.causeChain,
+    ).toEqual(["バックヤード在庫自体が不足している(残り5点)"]);
+
+    const stockedBackroom = buildDashboardAlerts(
+      report({ stockoutUnitsByProduct: { bento: 50 }, backroomInventoryUnitsEnd: 500 }),
+    );
+    expect(
+      stockedBackroom.find((alert) => alert.id === "inventory-critical")?.causeChain,
+    ).toEqual(["バックヤードには在庫があるが棚への補充が追いついていない(残り500点)"]);
+  });
+
+  it("names the single most-backlogged task in the aggregate backlog alert's cause chain", () => {
+    const alerts = buildDashboardAlerts(
+      report({
+        operationBacklogByTask: {
+          register: 3,
+          replenishment: 25,
+          cleaning: 0,
+          delivery_receiving: 0,
+          admin: 0,
+        },
+      }),
+    );
+    expect(alerts.find((alert) => alert.id === "backlog-warning")?.causeChain).toEqual([
+      "補充の未処理が最も大きい(25点)",
+    ]);
+  });
 });
