@@ -104,6 +104,52 @@ function drawFloatingSaleTexts(context: CanvasRenderingContext2D, timestamp: num
   }
 }
 
+// docs/backlog.md Milestone 7 P2「客の入店演出」/ HANDOFF.md §2.7の残課題: spawnCustomer()
+// (storeOperationsEngine.ts) は客をlayout.entranceTileへ置いて歩き出させるだけで、
+// 画面上には「今まさに入店した」ことを示す合図が一切無かった。エンジン側のスキーマは
+// 変えず、直前フレームに居なかった客IDを検出し、その客の足元へ短時間で広がって
+// 消えるリングを描くだけの、Canvas描画層限定の追加とする(会計演出「+¥N」と同じ設計)。
+const ENTRANCE_RIPPLE_DURATION_MS = 500;
+let knownCustomerIds = new Set<string>();
+let entranceRippleStartedAt = new Map<string, number>();
+let hasSeenInitialCustomers = false;
+
+/** Pure: ids present in currentCustomers but absent from previousIds (just spawned this frame). */
+function newlyArrivedCustomerIds(
+  previousIds: ReadonlySet<string>,
+  currentCustomers: readonly { id: string }[],
+): string[] {
+  return currentCustomers.filter((customer) => !previousIds.has(customer.id)).map((customer) => customer.id);
+}
+
+function updateEntranceRipples(snapshot: StoreOperationsSnapshot, timestamp: number): void {
+  // Skip the very first observed frame (e.g. right after a save restore with customers
+  // already in-store) so those pre-existing customers don't all ripple at once.
+  if (hasSeenInitialCustomers) {
+    for (const id of newlyArrivedCustomerIds(knownCustomerIds, snapshot.customers)) {
+      entranceRippleStartedAt.set(id, timestamp);
+    }
+  } else {
+    hasSeenInitialCustomers = true;
+  }
+  knownCustomerIds = new Set(snapshot.customers.map((customer) => customer.id));
+  for (const id of entranceRippleStartedAt.keys()) {
+    if (!knownCustomerIds.has(id)) entranceRippleStartedAt.delete(id);
+  }
+}
+
+function drawEntranceRipple(context: CanvasRenderingContext2D, pixel: { x: number; y: number }, progress: number): void {
+  const radiusX = 8 + progress * 16;
+  context.save();
+  context.globalAlpha = 1 - progress;
+  context.strokeStyle = "#ffe9a8";
+  context.lineWidth = 2;
+  context.beginPath();
+  context.ellipse(pixel.x, pixel.y + 4, radiusX, radiusX * 0.4, 0, 0, Math.PI * 2);
+  context.stroke();
+  context.restore();
+}
+
 // The single Simulation instance shared with main.ts's numeric dashboard (see
 // src/ui/gameSession.ts). Populated once loaded; read fresh via peekGameSession()
 // rather than cached locally, so a reset triggered from main.ts's UI is picked up
@@ -702,8 +748,14 @@ function drawCustomer(
   context: CanvasRenderingContext2D,
   customer: StoreCustomerAgent,
   geometry: StoreViewGeometry,
+  timestamp: number,
 ): void {
   const pixel = agentPixel(customer, geometry);
+  const rippleStartedAt = entranceRippleStartedAt.get(customer.id);
+  if (rippleStartedAt !== undefined) {
+    const progress = (timestamp - rippleStartedAt) / ENTRANCE_RIPPLE_DURATION_MS;
+    if (progress < 1) drawEntranceRipple(context, pixel, Math.max(0, progress));
+  }
   if (storeArtAssets) drawAgentArtwork(context, storeArtAssets, customer, "customer", pixel);
   else {
     rect(context, pixel.x - 9, pixel.y - 27, 18, 34, "#315b8b", "#24303b", 1);
@@ -775,6 +827,7 @@ function drawStoreContents(
   layout: StoreLayout,
   snapshot: StoreOperationsSnapshot,
   geometry: StoreViewGeometry,
+  timestamp: number,
 ): void {
   for (const litter of snapshot.litter) drawLitter(context, litter, geometry);
 
@@ -786,7 +839,7 @@ function drawStoreContents(
     });
   }
   for (const customer of snapshot.customers) {
-    items.push({ depth: customer.y + 0.72, draw: () => drawCustomer(context, customer, geometry) });
+    items.push({ depth: customer.y + 0.72, draw: () => drawCustomer(context, customer, geometry, timestamp) });
   }
   for (const member of snapshot.staff) {
     items.push({ depth: member.y + 0.73, draw: () => drawStaff(context, member, geometry) });
@@ -920,7 +973,7 @@ function drawFrame(
   context.fillRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
   drawHud(context, snapshot);
   drawFloor(context, layout, geometry);
-  drawStoreContents(context, layout, snapshot, geometry);
+  drawStoreContents(context, layout, snapshot, geometry, timestamp);
   if (liveWeather() === "rain") drawRainOverlay(context, geometry, timestamp);
   drawFooter(context, snapshot, geometry);
 }
@@ -1696,6 +1749,7 @@ function start(): void {
     else engine.advance(0.001, engineContext(focus));
 
     const snapshot = engine.getSnapshot();
+    updateEntranceRipples(snapshot, timestamp);
     drawFrame(context, layout, snapshot, layoutEditor.isOpen(), timestamp);
     updateFloatingSaleTexts(snapshot, timestamp);
     drawFloatingSaleTexts(context, timestamp);
