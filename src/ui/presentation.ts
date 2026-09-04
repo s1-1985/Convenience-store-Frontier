@@ -8,6 +8,18 @@ export interface DashboardAlert {
   severity: AlertSeverity;
   title: string;
   detail: string;
+  /**
+   * Optional root-cause chain, one short step per link, drilling from this alert's own
+   * symptom (title/detail) down toward an underlying operational cause — see
+   * docs/game-design.md §10 "UI原則": "通知は問題を示すだけでなく、原因階層を持つ"
+   * (例: 売上低下 → 昼の来店減少 → 弁当欠品増加 → 午後便遅延と補充不足). Built only from
+   * fields already on DailyReport (no scenario/product lookup, no cross-day trend), so
+   * chains stay at the operational-task/cost/inventory level rather than reaching the
+   * category- or time-block-level detail the doc's own example shows — extending this
+   * further needs the function to take additional context (see visual-numeric-engine-
+   * integration.md "フェーズ2f" for what's still open).
+   */
+  causeChain?: string[];
 }
 
 export const HABIT_LABELS = {
@@ -81,6 +93,30 @@ export function topEntries(
     .map(([id, value]) => ({ id, value }));
 }
 
+// Largest non-zero task in an OperationTaskRecord (register/replenishment/cleaning/
+// delivery_receiving/admin), for pointing a cause chain at "which task specifically".
+function largestOperationTask(
+  record: OperationTaskRecord,
+): { task: keyof OperationTaskRecord; label: string; value: number } | undefined {
+  const top = (Object.entries(record) as Array<[keyof OperationTaskRecord, number]>)
+    .filter(([, value]) => value > 0)
+    .sort((a, b) => b[1] - a[1])[0];
+  return top ? { task: top[0], label: OPERATION_LABELS[top[0]], value: top[1] } : undefined;
+}
+
+// Which cost line is pressuring today's profit the hardest, for the 赤字/loss cause chain.
+function dominantCostCause(report: CompetitiveDailyReport): string {
+  const candidates: Array<[string, number]> = [
+    ["人件費", report.laborCost],
+    ["廃棄コスト", report.wasteCost],
+    ["物流費", report.deliveryCost],
+    ["光熱費", report.utilitiesCost],
+  ];
+  const top = candidates.sort((a, b) => b[1] - a[1])[0]!;
+  if (top[1] <= 0) return "原価が売上に対して重い";
+  return `${top[0]}が利益を圧迫している(${formatYen(top[1])})`;
+}
+
 export function buildDashboardAlerts(
   report: CompetitiveDailyReport | undefined,
 ): DashboardAlert[] {
@@ -105,6 +141,7 @@ export function buildDashboardAlerts(
       severity: "critical",
       title: "大幅な赤字",
       detail: `${report.day}日目の損益は${formatYen(report.profit)}。営業時間、人員、発注方針を同時に見直す必要がある。`,
+      causeChain: [dominantCostCause(report)],
     });
   } else if (report.profit < 0) {
     alerts.push({
@@ -112,38 +149,63 @@ export function buildDashboardAlerts(
       severity: "warning",
       title: "赤字営業",
       detail: `${report.day}日目の損益は${formatYen(report.profit)}。費用増に売上が追いついていない。`,
+      causeChain: [dominantCostCause(report)],
     });
   }
 
   if (report.abandonedCustomers >= 10 || report.queueCustomersEnd >= 15) {
+    const registerBacklog = report.operationBacklogByTask.register;
     alerts.push({
       id: "queue-critical",
       severity: "critical",
       title: "レジ待ちで多数離脱",
       detail: `離脱${formatNumber(report.abandonedCustomers)}人、閉店時行列${formatNumber(report.queueCustomersEnd)}人。レジ優先または人員増が必要である。`,
+      causeChain: [
+        registerBacklog > 0
+          ? `レジ業務の未処理が蓄積している(${formatNumber(registerBacklog, 0)}点)`
+          : "未処理業務は少ないが、来店の集中に人員配置が追いついていない",
+      ],
     });
   } else if (report.abandonedCustomers > 0 || report.queueCustomersEnd >= 5) {
+    const registerBacklog = report.operationBacklogByTask.register;
     alerts.push({
       id: "queue-warning",
       severity: "warning",
       title: "レジ待ちが発生",
       detail: `離脱${formatNumber(report.abandonedCustomers)}人、閉店時行列${formatNumber(report.queueCustomersEnd)}人。混雑時間帯の配置を確認する。`,
+      causeChain: [
+        registerBacklog > 0
+          ? `レジ業務の未処理が蓄積している(${formatNumber(registerBacklog, 0)}点)`
+          : "一時的な来店集中による行列(未処理業務は無い)",
+      ],
     });
   }
 
   if (report.operationalShelfStockoutUnits >= 20) {
+    const replenishmentBacklog = report.operationBacklogByTask.replenishment;
     alerts.push({
       id: "shelf-critical",
       severity: "critical",
       title: "補充遅延で棚が空いている",
       detail: `バックヤード在庫があっても、補充作業の遅れで${formatNumber(report.operationalShelfStockoutUnits)}個分の販売機会を失った。`,
+      causeChain: [
+        replenishmentBacklog > 0
+          ? `補充業務の未処理が蓄積している(${formatNumber(replenishmentBacklog, 0)}点)`
+          : "バックヤード在庫はあるが、配置人員が補充作業に届いていない",
+      ],
     });
   } else if (report.operationalShelfStockoutUnits > 0) {
+    const replenishmentBacklog = report.operationBacklogByTask.replenishment;
     alerts.push({
       id: "shelf-warning",
       severity: "warning",
       title: "棚補充が追いついていない",
       detail: `補充遅延による棚欠品が${formatNumber(report.operationalShelfStockoutUnits)}個分発生した。`,
+      causeChain: [
+        replenishmentBacklog > 0
+          ? `補充業務の未処理が蓄積している(${formatNumber(replenishmentBacklog, 0)}点)`
+          : "バックヤード在庫はあるが、配置人員が補充作業に届いていない",
+      ],
     });
   }
 
@@ -153,6 +215,11 @@ export function buildDashboardAlerts(
       severity: "critical",
       title: "在庫そのものが不足",
       detail: `商品在庫不足による欠品が${formatNumber(inventoryStockouts)}個分発生した。発注方針または納品方式を見直す。`,
+      causeChain: [
+        report.backroomInventoryUnitsEnd < inventoryStockouts
+          ? `バックヤード在庫自体が不足している(残り${formatNumber(report.backroomInventoryUnitsEnd, 0)}点)`
+          : `バックヤードには在庫があるが棚への補充が追いついていない(残り${formatNumber(report.backroomInventoryUnitsEnd, 0)}点)`,
+      ],
     });
   } else if (inventoryStockouts > 0) {
     alerts.push({
@@ -160,6 +227,11 @@ export function buildDashboardAlerts(
       severity: "warning",
       title: "商品在庫が不足",
       detail: `商品在庫不足による欠品が${formatNumber(inventoryStockouts)}個分発生した。`,
+      causeChain: [
+        report.backroomInventoryUnitsEnd < inventoryStockouts
+          ? `バックヤード在庫自体が不足している(残り${formatNumber(report.backroomInventoryUnitsEnd, 0)}点)`
+          : `バックヤードには在庫があるが棚への補充が追いついていない(残り${formatNumber(report.backroomInventoryUnitsEnd, 0)}点)`,
+      ],
     });
   }
 
@@ -169,15 +241,22 @@ export function buildDashboardAlerts(
       severity: "warning",
       title: "廃棄負担が大きい",
       detail: `廃棄原価が売上の${formatPercent(report.wasteCost / report.revenue, 1)}。欠品防止を優先しすぎている可能性がある。`,
+      causeChain: [
+        inventoryStockouts > 0
+          ? `欠品も同時に発生している(欠品${formatNumber(inventoryStockouts, 0)}個。カテゴリ間の発注配分を見直す余地がある)`
+          : "欠品はほぼ無く、発注量が需要を上回っている可能性が高い",
+      ],
     });
   }
 
   if (operationBacklog >= 20) {
+    const top = largestOperationTask(report.operationBacklogByTask);
     alerts.push({
       id: "backlog-warning",
       severity: "warning",
       title: "店舗作業が積み残されている",
       detail: `未処理作業は合計${formatNumber(operationBacklog)}作業点。優先順位の低い業務が翌日に持ち越されている。`,
+      causeChain: top ? [`${top.label}の未処理が最も大きい(${formatNumber(top.value, 0)}点)`] : [],
     });
   }
 
@@ -187,6 +266,11 @@ export function buildDashboardAlerts(
       severity: report.habitualDiversionsToCompetitor >= 5 ? "critical" : "warning",
       title: "常連客が競合へ流出",
       detail: `習慣化した需要のうち${formatNumber(report.habitualDiversionsToCompetitor)}人分が、自社の欠品・混雑を理由に競合へ移った。`,
+      causeChain: [
+        inventoryStockouts >= report.abandonedCustomers + report.queueCustomersEnd
+          ? `欠品の影響が大きい(欠品${formatNumber(inventoryStockouts, 0)}個)`
+          : `行列・混雑の影響が大きい(閉店時行列${formatNumber(report.queueCustomersEnd, 0)}人)`,
+      ],
     });
   }
 

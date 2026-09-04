@@ -1254,7 +1254,13 @@ function renderDayAlert(shell: HTMLElement): void {
   const title = banner.querySelector("strong");
   const detail = banner.querySelector("span");
   if (title) title.textContent = `本日:${alert.title}`;
-  if (detail) detail.textContent = alert.detail;
+  if (detail) {
+    // game-design.md §10「通知は原因階層を持つ」: the symptom (alert.detail) followed by
+    // its cause chain (see DashboardAlert.causeChain in presentation.ts), each link
+    // prefixed with "→" so the banner reads as one drill-down rather than a flat list.
+    const chain = alert.causeChain ?? [];
+    detail.textContent = [alert.detail, ...chain.map((step) => `→ ${step}`)].join(" ");
+  }
 }
 
 function bindNavigation(
