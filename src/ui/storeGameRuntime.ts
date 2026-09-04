@@ -255,16 +255,16 @@ function liveWeather(): Weather | undefined {
  * Returns undefined before the shared session has loaded, before any day has completed,
  * or when the latest day has nothing above "info" severity to report.
  */
-function latestDayAlert(): DashboardAlert | undefined {
+function latestDayAlert(): { day: number; alert: DashboardAlert } | undefined {
   const session = gameSession();
   if (!session) return undefined;
   const latest = session.session.simulation.getAllDailyReports().at(-1);
   if (!latest) return undefined;
   const alerts = buildDashboardAlerts(latest);
-  return (
+  const alert =
     alerts.find((alert) => alert.severity === "critical") ??
-    alerts.find((alert) => alert.severity === "warning")
-  );
+    alerts.find((alert) => alert.severity === "warning");
+  return alert ? { day: latest.day, alert } : undefined;
 }
 
 function timeBlockForHour(scenario: ScenarioBundle, hour: number): TimeBlockId {
@@ -994,8 +994,8 @@ function buildShell(): HTMLElement {
     <section class="store-game-stage" aria-label="コンビニ店内営業">
       <canvas id="store-game-canvas" width="1080" height="500"></canvas>
       <button type="button" class="store-game-menu" data-game-action="detail" aria-label="詳細設定">詳細</button>
-      <div class="live-incident" data-live-incident hidden><strong></strong><span></span></div>
-      <div class="live-incident day-alert" data-day-alert hidden><strong></strong><span></span></div>
+      <div class="live-incident" data-live-incident hidden><strong></strong><span></span><button type="button" class="banner-dismiss" data-dismiss-live-incident aria-label="この通知を閉じる">×</button></div>
+      <div class="live-incident day-alert" data-day-alert hidden><strong></strong><span></span><button type="button" class="banner-dismiss" data-dismiss-day-alert aria-label="この通知を閉じる">×</button></div>
       <div class="orientation-message">端末を横向きにしてください</div>
     </section>
     <nav class="store-game-nav" aria-label="主要メニュー">
@@ -1371,6 +1371,14 @@ function renderStorePolicyPanel(panel: HTMLElement, snapshot: StoreOperationsSna
   });
 }
 
+// この2つの通知は本来「消せない」設計だった(HANDOFF.md §0-V参照: ユーザーから
+// 「赤い吹き出しが消えない」との報告)。理由の欄が示す問題(行列・欠品等)が実際に
+// 続いている限り表示を続けるのは意図通りだが、.live-incident自体はpointer-events:noneで
+// 一切操作できず、閉じる手段が無かった。×ボタンで手動で閉じられるようにし、原因の
+// 種類(=incident.id)が変わるかいったん解消して再発するまでは再表示しない(揉み消し
+// ではなく、同じ問題を毎フレーム繰り返し主張しないだけ)。
+let dismissedLiveIncidentId: string | undefined;
+
 function renderLiveIncident(shell: HTMLElement, snapshot: StoreOperationsSnapshot): void {
   const banner = shell.querySelector<HTMLElement>("[data-live-incident]");
   if (!banner) return;
@@ -1378,14 +1386,17 @@ function renderLiveIncident(shell: HTMLElement, snapshot: StoreOperationsSnapsho
   if (!incident) {
     banner.hidden = true;
     lastAutoStoppedIncident = "";
+    dismissedLiveIncidentId = undefined;
     return;
   }
-  banner.hidden = false;
+  banner.hidden = incident.id === dismissedLiveIncidentId;
   banner.dataset.severity = incident.severity;
   const title = banner.querySelector("strong");
   const detail = banner.querySelector("span");
   if (title) title.textContent = incident.title;
   if (detail) detail.textContent = incident.detail;
+  // Auto-stop is a safety net independent of whether the player has dismissed the
+  // banner's *display* — it still fires the first time this incident turns critical.
   const autoStop = optional<HTMLInputElement>("auto-stop-checkbox")?.checked ?? true;
   if (incident.severity === "critical" && autoStop && isPlaying() && lastAutoStoppedIncident !== incident.id) {
     lastAutoStoppedIncident = incident.id;
@@ -1398,15 +1409,20 @@ function renderLiveIncident(shell: HTMLElement, snapshot: StoreOperationsSnapsho
 // the player actually looks — including when it's what silently paused playback via
 // main.ts's own day-boundary auto-stop (that one has no Canvas-visible reason on its
 // own; this banner supplies it for free since it reads the same daily report).
+// See dismissedLiveIncidentId above — same rationale, keyed by report day instead of
+// incident id (a day's diagnosis only changes when the next day's report replaces it).
+let dismissedDayAlertDay: number | undefined;
+
 function renderDayAlert(shell: HTMLElement): void {
   const banner = shell.querySelector<HTMLElement>("[data-day-alert]");
   if (!banner) return;
-  const alert = latestDayAlert();
-  if (!alert) {
+  const latest = latestDayAlert();
+  if (!latest) {
     banner.hidden = true;
     return;
   }
-  banner.hidden = false;
+  const { day, alert } = latest;
+  banner.hidden = day === dismissedDayAlertDay;
   banner.dataset.severity = alert.severity;
   const title = banner.querySelector("strong");
   const detail = banner.querySelector("span");
@@ -1434,6 +1450,17 @@ function bindNavigation(
   const storePolicyPanel = shell.querySelector<HTMLElement>("#store-policy-panel");
   shell.addEventListener("click", (event) => {
     const target = event.target as Element | null;
+    if (target?.closest("[data-dismiss-live-incident]")) {
+      const snapshot = getEngine().getSnapshot();
+      dismissedLiveIncidentId = detectStoreIncidents(snapshot)[0]?.id;
+      renderLiveIncident(shell, snapshot);
+      return;
+    }
+    if (target?.closest("[data-dismiss-day-alert]")) {
+      dismissedDayAlertDay = latestDayAlert()?.day;
+      renderDayAlert(shell);
+      return;
+    }
     const closeStaff = target?.closest<HTMLButtonElement>("[data-close-staff]");
     if (closeStaff && staffPanel) {
       staffPanel.hidden = true;
