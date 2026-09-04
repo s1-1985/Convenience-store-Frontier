@@ -366,8 +366,10 @@ export function maxShelfTier(category: StoreCategoryId): number {
   return PHYSICAL_EXPANSION_DIRECTIVES[category] ? MAX_ABSTRACT_SHELF_TIER + 1 : MAX_ABSTRACT_SHELF_TIER;
 }
 
-const CUSTOMER_MOVE_SPEED = 3.2;
-const STAFF_MOVE_SPEED = 3.8;
+// ユーザーから実機で「1倍速でもキャラの動きが遅すぎる」との報告(HANDOFF.md §0-W)を
+// 受けて底上げした基準値(旧: 3.2/3.8。店員は客より少し速いという比は維持)。
+const CUSTOMER_MOVE_SPEED = 4.0;
+const STAFF_MOVE_SPEED = 4.8;
 const MAX_VISIBLE_CUSTOMERS = 28;
 const REPLENISH_BATCH_UNITS = 8;
 const BASE_CHECKOUT_SECONDS = 1.7;
