@@ -718,6 +718,7 @@ function drawCustomer(
   if (customer.state === "queueing" && customer.patienceRemainingSeconds < 6) bubble = "!";
   if (customer.state === "leaving" && customer.reason === "stockout") bubble = "品切?";
   if (customer.state === "leaving" && customer.reason === "price") bubble = "高い…";
+  if (customer.state === "leaving" && customer.reason === "queue_abandonment") bubble = "待てない";
   if (bubble) drawBubble(context, bubble, pixel.x, pixel.y - 83);
 }
 
