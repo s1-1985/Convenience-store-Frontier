@@ -899,12 +899,21 @@ function drawInventoryBar(
   text(context, `${inventory.shelfUnits}/${inventory.shelfCapacity}`, x + width, y, 9, "right", "#dceaf0");
 }
 
+// ADR-0003/ADR-0004でカテゴリが7→9種(frozen/hot追加)に増えたが、1段組み(14 + index*118)の
+// ままだと末尾2カテゴリ(index 7-8, x=840〜1063)が右側の経営目標パネル(objectiveX=842〜)と
+// 重なって表示されてしまう(冷凍/ホットの数値が読めなくなるバグ)。目標パネルの手前(x<820)に
+// 収まるよう5列×2段へ折り返す。
+const FOOTER_CATEGORY_COLUMNS = 5;
+const FOOTER_CATEGORY_ROW_HEIGHT = 24;
+
 function drawFooter(context: CanvasRenderingContext2D, snapshot: StoreOperationsSnapshot, geometry: StoreViewGeometry): void {
   const y = geometry.footerY;
   rect(context, 0, y, LOGICAL_WIDTH, LOGICAL_HEIGHT - y, "#071e36", "#e4ad3e", 2);
   const categories = Object.keys(CATEGORY_LABELS) as StoreCategoryId[];
   categories.forEach((categoryId, index) => {
-    drawInventoryBar(context, 14 + index * 118, y + 15, 105, categoryId, snapshot);
+    const column = index % FOOTER_CATEGORY_COLUMNS;
+    const row = Math.floor(index / FOOTER_CATEGORY_COLUMNS);
+    drawInventoryBar(context, 14 + column * 118, y + 15 + row * FOOTER_CATEGORY_ROW_HEIGHT, 105, categoryId, snapshot);
   });
 
   const objectiveX = 842;

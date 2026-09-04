@@ -492,6 +492,25 @@ describe("individual store operations engine", () => {
     expect(Object.values(snapshot.categoryTiers).every((tier) => tier === 0)).toBe(true);
   });
 
+  it("falls back to default inventory for categories added after this save was made (ADR-0003/ADR-0004)", () => {
+    const source = createStoreOperationsEngine(308).serialize() as Partial<SerializedStoreOperations>;
+    delete (source.inventories as Record<string, unknown>).frozen;
+    delete (source.inventories as Record<string, unknown>).hot;
+
+    const engine = restoreStoreOperationsEngine(source as SerializedStoreOperations);
+    const snapshot = engine.getSnapshot();
+
+    for (const categoryId of ["frozen", "hot"] as const) {
+      const inventory = snapshot.inventories[categoryId];
+      expect(inventory.categoryId).toBe(categoryId);
+      expect(Number.isFinite(inventory.shelfUnits)).toBe(true);
+      expect(Number.isFinite(inventory.shelfCapacity)).toBe(true);
+      expect(inventory.shelfCapacity).toBeGreaterThan(0);
+      expect(Number.isFinite(inventory.price)).toBe(true);
+      expect(Number.isFinite(inventory.backroomUnits)).toBe(true);
+    }
+  });
+
   it("counts consecutive days without any policy action", () => {
     const engine = createStoreOperationsEngine(401);
     expect(engine.getSnapshot().daysSincePolicyChange).toBe(0);

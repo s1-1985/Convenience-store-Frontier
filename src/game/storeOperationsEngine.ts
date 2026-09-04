@@ -680,11 +680,21 @@ function copyStaff(staff: StoreStaffAgent): StoreStaffAgent {
   return { ...staff, path: staff.path.map(copyPoint) };
 }
 
+// Merges each category's CATEGORY_DEFAULTS underneath the saved state (rather than just
+// spreading the saved entry) so a save made before a category existed — e.g. "frozen"/
+// "hot", added by ADR-0003/ADR-0004 after this save format was already in use — restores
+// with real numbers instead of `{ ...undefined }`'s `{}` (shelfUnits/shelfCapacity/price
+// all undefined, rendering as literal "undefined/undefined" in the footer and product
+// panel, and throwing when the product panel's price control calls
+// `inventory.price.toLocaleString()`).
 function copyInventory(
   inventories: Record<StoreCategoryId, ShelfInventoryState>,
 ): Record<StoreCategoryId, ShelfInventoryState> {
   return Object.fromEntries(
-    CATEGORY_IDS.map((categoryId) => [categoryId, { ...inventories[categoryId] }]),
+    CATEGORY_IDS.map((categoryId) => [
+      categoryId,
+      { ...CATEGORY_DEFAULTS[categoryId], ...inventories[categoryId], categoryId },
+    ]),
   ) as Record<StoreCategoryId, ShelfInventoryState>;
 }
 
