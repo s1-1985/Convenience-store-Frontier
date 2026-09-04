@@ -31,6 +31,7 @@ import type {
   TimeBlockId,
 } from "../simulation/types.js";
 import { priorityStoreObjectives, type StoreObjectiveStatus } from "../game/storeObjectives.js";
+import type { Weather } from "../simulation/demand.js";
 import {
   assignmentsForPreset,
   recommendStaffing,
@@ -175,6 +176,20 @@ function realStockoutSeverityByCategory(): Partial<Record<StoreCategoryId, numbe
   }
   if (severity.snacks !== undefined) severity.dessert = severity.snacks;
   return severity;
+}
+
+/**
+ * Today's actual weather from the shared real Simulation (SimulationSnapshot.weather,
+ * rolled once per day — see rollWeather() in demand.ts). Distinct from the "天気" text
+ * the numeric dashboard shows (main.ts's #weather-label, "直近日報：晴/雨"): that one is
+ * deliberately last-*completed*-day, one day behind. weatherDemandMultiplier() already
+ * makes weather a real (if previously invisible) driver of today's foot traffic — see
+ * drawHud()'s "天気" card and drawRainOverlay() below for where this is used.
+ *
+ * Returns undefined before the shared session has loaded.
+ */
+function liveWeather(): Weather | undefined {
+  return gameSession()?.session.simulation.getSnapshot().weather;
 }
 
 /**
@@ -798,7 +813,8 @@ function drawHud(context: CanvasRenderingContext2D, snapshot: StoreOperationsSna
   text(context, "FRONTIER 24", 53, 27, 12, "center", "#d64b27");
   drawStatusCard(context, 105, 94, "営業日", `${currentDay()}日目`);
   drawStatusCard(context, 205, 113, "時刻", optional("time-label")?.textContent ?? "06:00", 0);
-  drawStatusCard(context, 324, 136, "天気", optional("weather-label")?.textContent ?? "晴れ", 7);
+  const weather = liveWeather();
+  drawStatusCard(context, 324, 136, "天気", weather === "rain" ? "雨" : "晴れ", 7);
   drawStatusCard(context, 466, 232, "所持金", `¥${snapshot.cash.toLocaleString("ja-JP")}`, 6);
   drawStatusCard(context, 704, 174, "店内売上", `¥${snapshot.kpis.revenue.toLocaleString("ja-JP")}`, 5);
   const status = isStoreOpen() ? (isPlaying() ? "営業中" : "一時停止") : "営業時間外";
@@ -847,11 +863,45 @@ function drawFooter(context: CanvasRenderingContext2D, snapshot: StoreOperations
   });
 }
 
+// A light blue-grey tint plus a handful of animated diagonal streaks over the store
+// floor when liveWeather() is rain — see PRINCIPLES.md「1. すべてのシステムを顧客行動
+// へ接続する」「8. 数値は深く、表示は分かりやすくする」: weatherDemandMultiplier()
+// (demand.ts) already makes rain a real driver of today's foot traffic, but until now
+// nothing on screen showed it was raining at all — the HUD's "天気" card was the only
+// hint, and it read yesterday's *completed* report rather than today's actual weather.
+const RAIN_STREAK_COUNT = 26;
+const RAIN_STREAK_SPEED_PX_PER_MS = 0.55;
+const RAIN_STREAK_LENGTH = 16;
+
+function drawRainOverlay(context: CanvasRenderingContext2D, geometry: StoreViewGeometry, timestamp: number): void {
+  const top = geometry.gridY;
+  const height = geometry.footerY - top;
+  if (height <= 0) return;
+  context.save();
+  context.fillStyle = "rgba(20, 40, 70, 0.14)";
+  context.fillRect(0, top, LOGICAL_WIDTH, height);
+  context.strokeStyle = "rgba(200, 220, 255, 0.35)";
+  context.lineWidth = 1;
+  for (let i = 0; i < RAIN_STREAK_COUNT; i += 1) {
+    // Deterministic per-streak lane (no Math.random) so streaks hold a stable horizontal
+    // position while looping smoothly top-to-bottom via timestamp modulo.
+    const laneX = ((i * 97) % LOGICAL_WIDTH) + ((i * 53) % 40) - 20;
+    const phase = (timestamp * RAIN_STREAK_SPEED_PX_PER_MS + i * 71) % (height + RAIN_STREAK_LENGTH);
+    const y = top + phase - RAIN_STREAK_LENGTH;
+    context.beginPath();
+    context.moveTo(laneX, y);
+    context.lineTo(laneX - 4, y + RAIN_STREAK_LENGTH);
+    context.stroke();
+  }
+  context.restore();
+}
+
 function drawFrame(
   context: CanvasRenderingContext2D,
   layout: StoreLayout,
   snapshot: StoreOperationsSnapshot,
   editorOpen: boolean,
+  timestamp: number,
 ): void {
   const geometry = editorOpen ? EDITOR_GEOMETRY : PLAY_GEOMETRY;
   context.clearRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
@@ -863,6 +913,7 @@ function drawFrame(
   drawHud(context, snapshot);
   drawFloor(context, layout, geometry);
   drawStoreContents(context, layout, snapshot, geometry);
+  if (liveWeather() === "rain") drawRainOverlay(context, geometry, timestamp);
   drawFooter(context, snapshot, geometry);
 }
 
@@ -1637,7 +1688,7 @@ function start(): void {
     else engine.advance(0.001, engineContext(focus));
 
     const snapshot = engine.getSnapshot();
-    drawFrame(context, layout, snapshot, layoutEditor.isOpen());
+    drawFrame(context, layout, snapshot, layoutEditor.isOpen(), timestamp);
     updateFloatingSaleTexts(snapshot, timestamp);
     drawFloatingSaleTexts(context, timestamp);
     renderLiveIncident(shell, snapshot);
