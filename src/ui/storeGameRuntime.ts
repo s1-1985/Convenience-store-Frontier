@@ -67,6 +67,42 @@ const STORE_SAVE_KEY = "convenience-store-frontier.store-operations.v1";
 let storeArtAssets: StoreArtAssets | undefined;
 let lastAutoStoppedIncident = "";
 
+// "見た目・演出が単調" (2026-09-03のユーザーフィードバック): 会計成立という核となる
+// 瞬間が、フッターの「店内売上」数字が静かに増えるだけで、画面上に一切演出されて
+// いなかった。snapshot.kpis.revenueは日替わりでリセットされる当日累計(下記
+// drawHudの表示と同じ値)なので、前フレームから増えた分だけ「+¥N」を浮かせて
+// フェードアウトさせる、エンジン側のスキーマ変更を伴わない最小の演出を追加する。
+interface FloatingSaleText {
+  amount: number;
+  startedAt: number;
+}
+const FLOATING_SALE_TEXT_DURATION_MS = 1100;
+let floatingSaleTexts: FloatingSaleText[] = [];
+let lastKnownRevenue: number | undefined;
+
+function updateFloatingSaleTexts(snapshot: StoreOperationsSnapshot, timestamp: number): void {
+  const revenue = snapshot.kpis.revenue;
+  if (lastKnownRevenue !== undefined && revenue > lastKnownRevenue) {
+    floatingSaleTexts.push({ amount: revenue - lastKnownRevenue, startedAt: timestamp });
+  }
+  lastKnownRevenue = revenue;
+  floatingSaleTexts = floatingSaleTexts.filter(
+    (entry) => timestamp - entry.startedAt < FLOATING_SALE_TEXT_DURATION_MS,
+  );
+}
+
+// Rises and fades just above the HUD's "店内売上" status card (drawStatusCard call at
+// x=704, width=174 in drawHud() below) so the popup reads as "that number just moved".
+function drawFloatingSaleTexts(context: CanvasRenderingContext2D, timestamp: number): void {
+  for (const entry of floatingSaleTexts) {
+    const progress = Math.min(1, Math.max(0, (timestamp - entry.startedAt) / FLOATING_SALE_TEXT_DURATION_MS));
+    context.save();
+    context.globalAlpha = 1 - progress;
+    text(context, `+¥${Math.round(entry.amount).toLocaleString("ja-JP")}`, 791, 47 - progress * 24, 13, "center", "#8ce99a");
+    context.restore();
+  }
+}
+
 // The single Simulation instance shared with main.ts's numeric dashboard (see
 // src/ui/gameSession.ts). Populated once loaded; read fresh via peekGameSession()
 // rather than cached locally, so a reset triggered from main.ts's UI is picked up
@@ -1602,6 +1638,8 @@ function start(): void {
 
     const snapshot = engine.getSnapshot();
     drawFrame(context, layout, snapshot, layoutEditor.isOpen());
+    updateFloatingSaleTexts(snapshot, timestamp);
+    drawFloatingSaleTexts(context, timestamp);
     renderLiveIncident(shell, snapshot);
     renderDayAlert(shell);
     const timeButton = shell.querySelector<HTMLButtonElement>("[data-game-action='time']");
