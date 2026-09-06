@@ -754,6 +754,27 @@ function drawBubble(context: CanvasRenderingContext2D, value: string, x: number,
   text(context, value, x, y - 8, 9, "center");
 }
 
+function customerBubbleLabel(customer: StoreCustomerAgent): string | undefined {
+  let bubble: string | undefined;
+  if (customer.regular) bubble = "★";
+  // Milestone 7 P2「商品を探す客」: show the sought category on longer aisle
+  // routes. Short routes stay quiet so the store does not become a wall of labels.
+  if (customer.state === "walking_to_shelf" && customer.targetCategory && customer.path.length >= 4) {
+    bubble = `${CATEGORY_LABELS[customer.targetCategory].slice(0, 2)}?`;
+  }
+  if (customer.state === "browsing" && customer.targetCategory) {
+    bubble = CATEGORY_LABELS[customer.targetCategory].slice(0, 2);
+  }
+  // docs/backlog.md Milestone 7 P2「時計を見る客」: expose rising impatience
+  // before the queue-abandonment threshold is reached.
+  if (customer.state === "queueing" && customer.patienceRemainingSeconds < 10) bubble = "⏰";
+  if (customer.state === "queueing" && customer.patienceRemainingSeconds < 6) bubble = "!";
+  if (customer.state === "leaving" && customer.reason === "stockout") bubble = "品切?";
+  if (customer.state === "leaving" && customer.reason === "price") bubble = "高い…";
+  if (customer.state === "leaving" && customer.reason === "queue_abandonment") bubble = "待てない";
+  return bubble;
+}
+
 function drawCustomer(
   context: CanvasRenderingContext2D,
   customer: StoreCustomerAgent,
@@ -774,20 +795,7 @@ function drawCustomer(
   if (customer.basketUnits > 0) {
     rect(context, pixel.x - 24, pixel.y - 4, 12, 14, "#2f79ad", "#173a53", 1);
   }
-  let bubble: string | undefined;
-  if (customer.regular) bubble = "★";
-  if (customer.state === "browsing" && customer.targetCategory) bubble = CATEGORY_LABELS[customer.targetCategory].slice(0, 2);
-  // docs/backlog.md Milestone 7 P2「時計を見る客」: patienceRemainingSeconds is already
-  // tracked per queueing customer (storeOperationsEngine.ts counts it down while
-  // queueing and calls routeCustomerToExit(customer, "queue_abandonment") once it runs
-  // out) — this graduates the existing single "!" threshold into two visible steps, so
-  // rising impatience is legible before a customer actually reaches the point of leaving
-  // (PRINCIPLES.md「2. 情報は徐々に見えるようになる」).
-  if (customer.state === "queueing" && customer.patienceRemainingSeconds < 10) bubble = "⏰";
-  if (customer.state === "queueing" && customer.patienceRemainingSeconds < 6) bubble = "!";
-  if (customer.state === "leaving" && customer.reason === "stockout") bubble = "品切?";
-  if (customer.state === "leaving" && customer.reason === "price") bubble = "高い…";
-  if (customer.state === "leaving" && customer.reason === "queue_abandonment") bubble = "待てない";
+  const bubble = customerBubbleLabel(customer);
   if (bubble) drawBubble(context, bubble, pixel.x, pixel.y - 83);
 }
 

@@ -44,6 +44,13 @@ describe("store game shell controls", () => {
     expect(source).toContain("newlyArrivedCustomerIds(knownCustomerIds, snapshot.customers)");
   });
 
+  it("shows what customers on a longer shelf route are trying to find", () => {
+    expect(source).toContain('customer.state === "walking_to_shelf"');
+    expect(source).toContain("customer.path.length >= 4");
+    expect(source).toContain('`${CATEGORY_LABELS[customer.targetCategory].slice(0, 2)}?`');
+    expect(source).toContain("const bubble = customerBubbleLabel(customer)");
+  });
+
   it("lets the player dismiss the live-incident and day-alert banners instead of them staying on screen forever", () => {
     expect(source).toContain("data-dismiss-live-incident");
     expect(source).toContain("data-dismiss-day-alert");
