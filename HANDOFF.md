@@ -1,7 +1,7 @@
 # HANDOFF — 引き継ぎメモ
 
-最終更新: 2026-09-04(セッションID `session_01UntB2KgYekvD9ktc1hxRJ4`)
-対象ブランチ: `claude/review-md-files-c0z9oa`(mainに追従、都度リセットして使う運用)
+最終更新: 2026-09-06
+対象ブランチ: `work`
 
 このファイルは、直近セッションで決まった仕様・実施した作業・積み残しの課題を、
 次のセッション(別のClaude Codeインスタンス)が読むだけで状況を把握できるように
@@ -10,6 +10,19 @@
 CLAUDE.mdの「Read in order」に従い、README.md → design/PRINCIPLES.md →
 docs/game-design.md → docs/vertical-slice.md → docs/architecture.md を
 読んだ後、このファイルで直近の変更点を把握してから作業を始めること。
+
+---
+
+## 0-Y. 続くセッション(2026-09-06、「商品を探す客」演出を追加)
+
+Milestone 7 P2の未着手項目だった「商品を探す客」を実装した。客が棚へ向かう
+`walking_to_shelf`状態で経路が4タイル以上残っている場合、目的カテゴリの先頭2文字と
+`?`（例: `弁当?`）を吹き出し表示する。短い移動では表示せず、棚へ到着して
+`browsing`へ移ると従来どおりカテゴリ名だけの表示へ切り替わる。
+
+- 既存の客の吹き出し判定を`customerBubbleLabel()`へ集約
+- 回帰テストを追加し、`docs/backlog.md`の該当項目を実装済みに更新
+- 残るMilestone 7 P2未実装は「廃棄演出」
 
 ---
 
