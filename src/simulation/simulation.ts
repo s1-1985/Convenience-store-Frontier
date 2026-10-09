@@ -11,6 +11,7 @@ import { computeCohortPotentialDemand, rollWeather, type Weather } from "./deman
 import {
   computeDeliveryCost,
   computeLaborCost,
+  computeMonthlyProfitCorrectionBonus,
   computeSalesFinance,
   computeUtilitiesCost,
   computeWasteCost,
@@ -187,6 +188,7 @@ export function createSimulation(
   let cash = scenario.playerStore.initialCash;
   let lastSlotPlayerVisits = 0;
   let monthSalesAccumulator = 0;
+  let monthProfitAccumulator = 0;
 
   const playerStore: StoreDefinition = {
     ...scenario.playerStore,
@@ -484,7 +486,9 @@ export function createSimulation(
       const habitSummary = habits.closeDay(clock.day);
 
       monthSalesAccumulator += revenue;
+      monthProfitAccumulator += profit;
       let storeRatingUpdate: MonthlyRatingResult | undefined;
+      let monthlyProfitCorrectionBonus: number | undefined;
       if (clock.day % MONTH_LENGTH_DAYS === 0) {
         storeRatingUpdate = applyMonthlyRatingUpdate(playerStore.reputation, {
           priceIndex: playerStore.priceIndex,
@@ -493,6 +497,10 @@ export function createSimulation(
         });
         playerStore.reputation = storeRatingUpdate.updatedRating;
         monthSalesAccumulator = 0;
+
+        monthlyProfitCorrectionBonus = computeMonthlyProfitCorrectionBonus(monthProfitAccumulator);
+        cash += monthlyProfitCorrectionBonus;
+        monthProfitAccumulator = 0;
       }
 
       dailyReports.push({
@@ -530,6 +538,7 @@ export function createSimulation(
         habitualDiversionsToCompetitor:
           accumulator.habitualDiversionsToCompetitor,
         storeRatingUpdate,
+        monthlyProfitCorrectionBonus,
       });
 
       planNextDayOrders();
