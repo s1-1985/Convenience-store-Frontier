@@ -41,6 +41,12 @@ import { allocateCategoryUnits, allocateProductUnits } from "./purchase.js";
 import { RandomStreams } from "./rng.js";
 import { computeStoreShares, evaluateStore, OTHER_OPTION_ID } from "./storeChoice.js";
 import { applyMonthlyRatingUpdate, MONTH_LENGTH_DAYS, type MonthlyRatingResult } from "./storeRating.js";
+import {
+  createInitialTownGrid,
+  runMonthlyTownGrowthTick,
+  type InfluenceSource,
+  type TownGrowthTickResult,
+} from "./townGrowth.js";
 import type {
   DeliveryPolicyId,
   OrderingPolicyId,
@@ -99,6 +105,8 @@ export interface SimulationSnapshot {
    * today's foot traffic.
    */
   weather: Weather;
+  /** 直近の月次集計(design/ps1-reference/algorithms.md §7)。最初の月が終わるまでは全0。 */
+  townGrowth: TownGrowthTickResult;
 }
 
 interface CohortSlotRecord {
@@ -199,6 +207,28 @@ export function createSimulation(
   const slotsPerBlock: Record<TimeBlockId, number> = Object.fromEntries(
     scenario.timeBlocks.map((block) => [block.id, slotsInTimeBlock(block)]),
   ) as Record<TimeBlockId, number>;
+
+  // 街の成長(design/ps1-reference/algorithms.md §7)用のタイルグリッド。実際の店舗座標
+  // データは無いため、自店を中心、競合店をその周囲へ均等配置する独自設計(ADR-0008参照、
+  // 対応する原作データが存在しない箇所の独自設計として明記)。
+  const townGrid = createInitialTownGrid();
+  const townGrowthSources: InfluenceSource[] = allStores.map((_, index) => {
+    if (index === 0) {
+      return { row: Math.floor(townGrid.height / 2), col: Math.floor(townGrid.width / 2) };
+    }
+    const competitorCount = allStores.length - 1;
+    const angle = (2 * Math.PI * (index - 1)) / competitorCount;
+    const radius = 15;
+    return {
+      row: Math.floor(townGrid.height / 2 + radius * Math.sin(angle)),
+      col: Math.floor(townGrid.width / 2 + radius * Math.cos(angle)),
+    };
+  });
+  let latestTownGrowth: TownGrowthTickResult = {
+    averageLevel: 0,
+    maxLevel: 0,
+    influencedTileCount: 0,
+  };
 
   const productsById = new Map(scenario.products.map((product) => [product.id, product]));
   const categoryIdByProductId = new Map(scenario.products.map((product) => [product.id, product.categoryId]));
@@ -501,6 +531,12 @@ export function createSimulation(
         monthlyProfitCorrectionBonus = computeMonthlyProfitCorrectionBonus(monthProfitAccumulator);
         cash += monthlyProfitCorrectionBonus;
         monthProfitAccumulator = 0;
+
+        latestTownGrowth = runMonthlyTownGrowthTick(
+          townGrid,
+          townGrowthSources,
+          randomStreams.stream("town_growth"),
+        );
       }
 
       dailyReports.push({
@@ -539,6 +575,7 @@ export function createSimulation(
           accumulator.habitualDiversionsToCompetitor,
         storeRatingUpdate,
         monthlyProfitCorrectionBonus,
+        townGrowth: monthlyProfitCorrectionBonus !== undefined ? latestTownGrowth : undefined,
       });
 
       planNextDayOrders();
@@ -581,6 +618,7 @@ export function createSimulation(
         habits: habits.getSnapshot(),
         lastSlotPlayerVisits,
         weather,
+        townGrowth: latestTownGrowth,
       };
     },
 

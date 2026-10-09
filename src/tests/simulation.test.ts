@@ -141,6 +141,32 @@ describe("createSimulation", () => {
     expect(firstMonth[3]!.cashEnd).toBeCloseTo(cashBeforeBonus + expectedBonus, 5);
   });
 
+  it("MONTH_LENGTH_DAYS(4日)ごとの月末にのみ街の成長の集計が記録され、snapshotにも反映される", () => {
+    const scenario = loadTestScenario();
+    const sim = createSimulation(scenario, 777);
+
+    expect(sim.getSnapshot().townGrowth).toEqual({
+      averageLevel: 0,
+      maxLevel: 0,
+      influencedTileCount: 0,
+    });
+
+    sim.runToEnd();
+    const reports = sim.getAllDailyReports();
+
+    for (const report of reports) {
+      if (report.day % 4 === 0) {
+        expect(report.townGrowth).toBeDefined();
+      } else {
+        expect(report.townGrowth).toBeUndefined();
+      }
+    }
+
+    const lastMonthEnd = reports.filter((r) => r.day % 4 === 0).at(-1)!;
+    expect(sim.getSnapshot().townGrowth).toEqual(lastMonthEnd.townGrowth);
+    expect(sim.getSnapshot().townGrowth.influencedTileCount).toBeGreaterThan(0);
+  });
+
   it("applies a renovation fee when category area changes by more than 10 points", () => {
     const scenario = loadTestScenario();
     const sim = createSimulation(scenario, 1);
