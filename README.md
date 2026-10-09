@@ -58,6 +58,7 @@ npm run preview
 - [ゲームデザインの憲法](design/PRINCIPLES.md)
 - [ゲームデザイン](docs/game-design.md)
 - [30日版垂直スライス仕様](docs/vertical-slice.md)
+- [初代ザ・コンビニ(PS1版)解析データ参照資料](design/ps1-reference/README.md)
 - [実装バックログ](docs/backlog.md)
 - [フリープレイ先行ロードマップ](docs/free-play-roadmap.md)
 - [AndroidデモAPK](docs/android-demo.md)
