@@ -39,6 +39,7 @@ import {
 } from "./operations.js";
 import { allocateCategoryUnits, allocateProductUnits } from "./purchase.js";
 import { RandomStreams } from "./rng.js";
+import { createStaffRoster, tickStaffRosterSlot, type StaffMember } from "./staffAi.js";
 import { computeStoreShares, evaluateStore, OTHER_OPTION_ID } from "./storeChoice.js";
 import { applyMonthlyRatingUpdate, MONTH_LENGTH_DAYS, type MonthlyRatingResult } from "./storeRating.js";
 import {
@@ -107,6 +108,11 @@ export interface SimulationSnapshot {
   weather: Weather;
   /** 直近の月次集計(design/ps1-reference/algorithms.md §7)。最初の月が終わるまでは全0。 */
   townGrowth: TownGrowthTickResult;
+  /** 店員AI(design/ps1-reference/algorithms.md §5)の現在の要員状態。 */
+  staffRoster: {
+    averageEnergy: number;
+    restingCount: number;
+  };
 }
 
 interface CohortSlotRecord {
@@ -207,6 +213,15 @@ export function createSimulation(
   const slotsPerBlock: Record<TimeBlockId, number> = Object.fromEntries(
     scenario.timeBlocks.map((block) => [block.id, slotsInTimeBlock(block)]),
   ) as Record<TimeBlockId, number>;
+
+  // 店員AI(design/ps1-reference/algorithms.md §5、ADR-0010参照)。既存の
+  // set_task_priorities(店舗単位の優先順位)は置き換えず、その下で個々の店員が
+  // 能力値・活力を持つ層として追加する。人員数が最大の時間帯分だけ要員を確保する。
+  const maxStaffingCount = Math.max(0, ...Object.values(playerStore.staffingByTimeBlock));
+  const staffRoster: StaffMember[] = createStaffRoster(
+    maxStaffingCount,
+    randomStreams.stream("staff_ai"),
+  );
 
   // 街の成長(design/ps1-reference/algorithms.md §7)用のタイルグリッド。実際の店舗座標
   // データは無いため、自店を中心、競合店をその周囲へ均等配置する独自設計(ADR-0008参照、
@@ -402,6 +417,12 @@ export function createSimulation(
 
     const isOpen = isWithinHours(clock.slot, playerStore.openingHour, playerStore.closingHour);
     const staffCount = playerStore.staffingByTimeBlock[timeBlock];
+    const workingStaffCount = tickStaffRosterSlot(
+      staffRoster,
+      staffCount,
+      isOpen,
+      randomStreams.stream("staff_ai"),
+    );
     const desiredUnitsTotal = Object.values(desiredProductUnitsThisSlot).reduce(
       (sum, units) => sum + units,
       0,
@@ -412,7 +433,7 @@ export function createSimulation(
       customerArrivals: playerVisitsThisSlot,
       desiredProductUnits: desiredUnitsTotal,
       deliveryUnits: deliveredUnits,
-      staffCount,
+      staffCount: workingStaffCount,
       isOpen,
       isLastSlotOfDay: dayJustEnded,
       isNight: isOpen && timeBlock === "evening",
@@ -619,6 +640,13 @@ export function createSimulation(
         lastSlotPlayerVisits,
         weather,
         townGrowth: latestTownGrowth,
+        staffRoster: {
+          averageEnergy:
+            staffRoster.length > 0
+              ? staffRoster.reduce((sum, member) => sum + member.energy, 0) / staffRoster.length
+              : 0,
+          restingCount: staffRoster.filter((member) => member.resting).length,
+        },
       };
     },
 
