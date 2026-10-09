@@ -1,6 +1,6 @@
 # ADR-0007: 初代ザ・コンビニ(PS1版)解析データに基づく忠実再現路線
 
-Status: Accepted
+Status: Superseded by ADR-0008
 Date: 2026-10-09
 
 ## Context
