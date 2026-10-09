@@ -167,6 +167,22 @@ describe("createSimulation", () => {
     expect(sim.getSnapshot().townGrowth.influencedTileCount).toBeGreaterThan(0);
   });
 
+  it("店員の活力が長時間営業で尽きると、稼働人数とsnapshotのstaffRosterに現れる", () => {
+    const scenario = loadTestScenario();
+    const sim = createSimulation(scenario, 42);
+
+    const initialRoster = sim.getSnapshot().staffRoster;
+    expect(initialRoster.averageEnergy).toBe(100);
+    expect(initialRoster.restingCount).toBe(0);
+
+    for (let day = 0; day < 10; day += 1) {
+      sim.advanceDay();
+    }
+
+    const laterRoster = sim.getSnapshot().staffRoster;
+    expect(laterRoster.averageEnergy).toBeLessThan(100);
+  });
+
   it("applies a renovation fee when category area changes by more than 10 points", () => {
     const scenario = loadTestScenario();
     const sim = createSimulation(scenario, 1);

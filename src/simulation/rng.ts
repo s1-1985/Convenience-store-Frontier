@@ -26,7 +26,8 @@ export type RandomStreamName =
   | "events"
   | "staffing"
   | "competitor"
-  | "town_growth";
+  | "town_growth"
+  | "staff_ai";
 
 export class RandomStreams {
   private readonly generators = new Map<RandomStreamName, RandomFn>();
