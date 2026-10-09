@@ -1,6 +1,7 @@
 import type { OperationTaskRecord } from "../simulation/operations.js";
 import type { HabitId, HabitMetricRecord } from "../simulation/habits.js";
 import type { MonthlyRatingResult } from "../simulation/storeRating.js";
+import type { TownGrowthTickResult } from "../simulation/townGrowth.js";
 
 export interface DailyReport {
   day: number;
@@ -41,4 +42,6 @@ export interface DailyReport {
    * algorithms.md §6.2)で、その月のcashへ追加で上乗せされた金額。
    */
   monthlyProfitCorrectionBonus?: number;
+  /** MONTH_LENGTH_DAYSごとの月末にのみ設定される(townGrowth.tsを参照)。 */
+  townGrowth?: TownGrowthTickResult;
 }
