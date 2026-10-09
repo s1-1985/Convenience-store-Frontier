@@ -109,6 +109,38 @@ describe("createSimulation", () => {
     );
   });
 
+  it("MONTH_LENGTH_DAYS(4日)ごとの月末にのみ財務の月次8倍補正ボーナスが記録される", () => {
+    const scenario = loadTestScenario();
+    const sim = createSimulation(scenario, 777);
+    sim.runToEnd();
+    const reports = sim.getAllDailyReports();
+
+    for (const report of reports) {
+      if (report.day % 4 === 0) {
+        expect(report.monthlyProfitCorrectionBonus).toBeDefined();
+      } else {
+        expect(report.monthlyProfitCorrectionBonus).toBeUndefined();
+      }
+    }
+  });
+
+  it("月次8倍補正ボーナスが、その月の4日分の利益合計の7倍としてcashへ反映される", () => {
+    const scenario = loadTestScenario();
+    const sim = createSimulation(scenario, 777);
+    sim.runToEnd();
+    const reports = sim.getAllDailyReports();
+
+    const firstMonth = reports.slice(0, 4);
+    const monthProfit = firstMonth.reduce((sum, r) => sum + r.profit, 0);
+    const expectedBonus = monthProfit * 7;
+
+    expect(firstMonth[3]!.monthlyProfitCorrectionBonus).toBeCloseTo(expectedBonus, 5);
+
+    const cashBeforeBonus =
+      scenario.playerStore.initialCash + firstMonth.reduce((sum, r) => sum + r.profit, 0);
+    expect(firstMonth[3]!.cashEnd).toBeCloseTo(cashBeforeBonus + expectedBonus, 5);
+  });
+
   it("applies a renovation fee when category area changes by more than 10 points", () => {
     const scenario = loadTestScenario();
     const sim = createSimulation(scenario, 1);

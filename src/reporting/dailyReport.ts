@@ -35,4 +35,10 @@ export interface DailyReport {
   habitualDiversionsToCompetitor: number;
   /** MONTH_LENGTH_DAYSごとの月末にのみ設定される(storeRating.tsを参照)。 */
   storeRatingUpdate?: MonthlyRatingResult;
+  /**
+   * MONTH_LENGTH_DAYSごとの月末にのみ設定される。PS1版の月次締め8倍補正
+   * (finance.ts computeMonthlyProfitCorrectionBonus、design/ps1-reference/
+   * algorithms.md §6.2)で、その月のcashへ追加で上乗せされた金額。
+   */
+  monthlyProfitCorrectionBonus?: number;
 }

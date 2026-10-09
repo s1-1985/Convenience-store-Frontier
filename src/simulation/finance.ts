@@ -37,3 +37,13 @@ export function computeUtilitiesCost(isOpen: boolean, economy: EconomyBalance): 
 export function computeDeliveryCost(deliveryEventCount: number, economy: EconomyBalance): number {
   return deliveryEventCount * economy.deliveryCostPerEvent;
 }
+
+// PS1版「ザ・コンビニ」の月次締め8倍補正(design/ps1-reference/algorithms.md §6.2)。
+// 原作は日々の取引で資金を1倍反映した上で、月末にその月の補正前利益をさらに7倍
+// 上乗せする(合計8倍)。本プロジェクトは取引単位ではなく日単位でcashへprofitを
+// 反映しているため、「1倍分」は既存のcash += profitがこれに相当し、ここでは
+// 月末に追加する7倍分のボーナスだけを返す(ADR-0008/0009: 原作の数値をそのまま
+// 移植し、独自に再スケーリングしない)。
+export function computeMonthlyProfitCorrectionBonus(monthProfitBeforeCorrection: number): number {
+  return monthProfitBeforeCorrection * 7;
+}
