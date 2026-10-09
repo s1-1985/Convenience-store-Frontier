@@ -38,6 +38,29 @@ describe("createCompetitiveSimulation", () => {
     );
   });
 
+  it("継続的に赤字の競合店は6ヶ月後(design/ps1-reference/algorithms.md §8.1)に閉店し、以後開店しない", () => {
+    const scenario = loadScenario(SCENARIO_PATH);
+    // 人件費を極端に増やして恒常的な赤字を作り、閉店判断を誘発する
+    scenario.competitorStores[0]!.staffingByTimeBlock = {
+      morning: 50,
+      midday: 50,
+      afternoon: 50,
+      evening: 50,
+    };
+    const simulation = createCompetitiveSimulation(scenario, 123, { maxDays: 40 });
+    simulation.runToEnd();
+
+    const competitorId = scenario.competitorStores[0]!.id;
+    const finalState = simulation.getSnapshot().rivalCloseStateByStore[competitorId]!;
+    expect(finalState.closed).toBe(true);
+
+    const reports = simulation.getAllDailyReports();
+    const lastReport = reports.at(-1)!;
+    // 閉店後は営業時間が0になりevaluateStoreで評価対象から外れるため、
+    // visitsByStoreにそもそもエントリが現れなくなる
+    expect(lastReport.visitsByStore[competitorId]).toBeUndefined();
+  });
+
   it("does not mutate the caller's scenario definition while competitor policy changes", () => {
     const scenario = loadScenario(SCENARIO_PATH);
     const originalCompetitors = structuredClone(scenario.competitorStores);
