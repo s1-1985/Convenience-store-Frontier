@@ -75,6 +75,40 @@ describe("createSimulation", () => {
     expect(totalProfit(longReports)).not.toBeCloseTo(totalProfit(shortReports), 5);
   });
 
+  it("MONTH_LENGTH_DAYS(4日)ごとの日次レポートにのみ店舗評価の更新が記録される", () => {
+    const scenario = loadTestScenario();
+    const sim = createSimulation(scenario, 777);
+    sim.runToEnd();
+    const reports = sim.getAllDailyReports();
+
+    for (const report of reports) {
+      if (report.day % 4 === 0) {
+        expect(report.storeRatingUpdate).toBeDefined();
+      } else {
+        expect(report.storeRatingUpdate).toBeUndefined();
+      }
+    }
+  });
+
+  it("月末の店舗評価更新がplayerStore.reputationのスナップショットへ反映される", () => {
+    const scenario = loadTestScenario();
+    const sim = createSimulation(scenario, 777);
+    const initialReputation = sim.getSnapshot().playerStore.reputation;
+    expect(initialReputation).toBe(scenario.playerStore.reputation);
+
+    sim.advanceDay();
+    sim.advanceDay();
+    sim.advanceDay();
+    expect(sim.getSnapshot().playerStore.reputation).toBe(initialReputation);
+
+    sim.advanceDay();
+    const afterFirstMonth = sim.getAllDailyReports().at(-1);
+    expect(afterFirstMonth?.storeRatingUpdate).toBeDefined();
+    expect(sim.getSnapshot().playerStore.reputation).toBe(
+      afterFirstMonth!.storeRatingUpdate!.updatedRating,
+    );
+  });
+
   it("applies a renovation fee when category area changes by more than 10 points", () => {
     const scenario = loadTestScenario();
     const sim = createSimulation(scenario, 1);

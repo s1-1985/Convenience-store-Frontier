@@ -1,5 +1,6 @@
 import type { OperationTaskRecord } from "../simulation/operations.js";
 import type { HabitId, HabitMetricRecord } from "../simulation/habits.js";
+import type { MonthlyRatingResult } from "../simulation/storeRating.js";
 
 export interface DailyReport {
   day: number;
@@ -32,4 +33,6 @@ export interface DailyReport {
   habitDailyPlayerSuccessfulVisitsByHabit: Record<HabitId, number>;
   habitDailyCompetitorSuccessfulVisitsByHabit: Record<HabitId, number>;
   habitualDiversionsToCompetitor: number;
+  /** MONTH_LENGTH_DAYSごとの月末にのみ設定される(storeRating.tsを参照)。 */
+  storeRatingUpdate?: MonthlyRatingResult;
 }

@@ -39,6 +39,7 @@ import {
 import { allocateCategoryUnits, allocateProductUnits } from "./purchase.js";
 import { RandomStreams } from "./rng.js";
 import { computeStoreShares, evaluateStore, OTHER_OPTION_ID } from "./storeChoice.js";
+import { applyMonthlyRatingUpdate, MONTH_LENGTH_DAYS, type MonthlyRatingResult } from "./storeRating.js";
 import type {
   DeliveryPolicyId,
   OrderingPolicyId,
@@ -74,6 +75,7 @@ export interface SimulationSnapshot {
     orderingPolicy: OrderingPolicyId;
     deliveryPolicy: DeliveryPolicyId;
     taskPriorities: OperationTaskId[];
+    reputation: number;
   };
   operations: {
     queueCustomers: number;
@@ -184,6 +186,7 @@ export function createSimulation(
   let finished = false;
   let cash = scenario.playerStore.initialCash;
   let lastSlotPlayerVisits = 0;
+  let monthSalesAccumulator = 0;
 
   const playerStore: StoreDefinition = {
     ...scenario.playerStore,
@@ -480,6 +483,18 @@ export function createSimulation(
 
       const habitSummary = habits.closeDay(clock.day);
 
+      monthSalesAccumulator += revenue;
+      let storeRatingUpdate: MonthlyRatingResult | undefined;
+      if (clock.day % MONTH_LENGTH_DAYS === 0) {
+        storeRatingUpdate = applyMonthlyRatingUpdate(playerStore.reputation, {
+          priceIndex: playerStore.priceIndex,
+          cleanliness: playerStore.cleanliness,
+          monthlySales: monthSalesAccumulator,
+        });
+        playerStore.reputation = storeRatingUpdate.updatedRating;
+        monthSalesAccumulator = 0;
+      }
+
       dailyReports.push({
         day: clock.day,
         weather: accumulator.weather,
@@ -514,6 +529,7 @@ export function createSimulation(
           habitSummary.dailyCompetitorSuccessfulVisitsByHabit,
         habitualDiversionsToCompetitor:
           accumulator.habitualDiversionsToCompetitor,
+        storeRatingUpdate,
       });
 
       planNextDayOrders();
@@ -547,6 +563,7 @@ export function createSimulation(
           orderingPolicy: playerStore.orderingPolicy,
           deliveryPolicy: playerStore.deliveryPolicy,
           taskPriorities: operations.getPriorities(),
+          reputation: playerStore.reputation,
         },
         operations: {
           queueCustomers: operations.getQueueCustomers(),
